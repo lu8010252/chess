@@ -371,7 +371,7 @@ function enterTable() {
   }
   ui.home.hidden = true;
   ui.table.hidden = false;
-  try { if (!(history.state && history.state.qt)) history.pushState({ qt: 1 }, ''); } catch {}
+  syncHistory();
   ui.canvas.style.width = '0px';
   ui.canvas.style.height = '0px';
   shownResult = '';
@@ -384,18 +384,43 @@ function enterTable() {
   });
 }
 
-// 系统/浏览器的返回（安卓返回键在 WebView 里常表现为 history.back）：先关弹层，再回首页
+// 系统/浏览器的返回（安卓返回键/手势在 WebView 里表现为 history.back）：
+// 只要不在首页（有弹层或在棋盘上）就垫一条历史记录，返回时先关弹层，再回首页
+let hasSentinel = false;
+let ignorePops = 0;
+let syncTimer = 0;
+
+function syncHistory() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    if (ignorePops > 0) return;
+    const needs = !!overlay || !!(ui.table && !ui.table.hidden);
+    try {
+      if (needs && !hasSentinel) {
+        history.pushState({ qs: 1 }, '');
+        hasSentinel = true;
+      } else if (!needs && hasSentinel) {
+        ignorePops++;
+        hasSentinel = false;
+        history.back();
+      }
+    } catch {}
+  }, 0);
+}
+
 window.addEventListener('popstate', () => {
-  if (overlay) {
-    closeOverlay();
-    try { if (ui.table && !ui.table.hidden) history.pushState({ qt: 1 }, ''); } catch {}
+  if (ignorePops > 0) {
+    ignorePops--;
+    syncHistory();
     return;
   }
-  if (ui.table && !ui.table.hidden) goHome();
+  hasSentinel = false;
+  if (overlay) closeOverlay();
+  else if (ui.table && !ui.table.hidden) goHome();
+  syncHistory();
 });
 
 function goHome() {
-  try { if (history.state && history.state.qt) history.back(); } catch {}
   ui.table.hidden = true;
   ui.home.hidden = false;
   ui.home.style.display = '';
@@ -403,6 +428,7 @@ function goHome() {
   if (overlayKind === 'result') closeOverlay();
   renderHome();
   nav?.afterGoHome();
+  syncHistory();
 }
 
 function updateChrome() {
@@ -537,6 +563,7 @@ function showOverlay(el, kind) {
   overlayKind = kind;
   nav?.onOverlayOpened(el);
   document.body.appendChild(el);
+  syncHistory();
   el.addEventListener('pointerdown', ev => {
     if (ev.target === el && kind !== 'result') closeOverlay();
   });
@@ -548,6 +575,7 @@ function closeOverlay() {
   overlay = null;
   overlayKind = null;
   if (had) nav?.onOverlayClosed();
+  syncHistory();
 }
 
 function openRules(mod, back) {
