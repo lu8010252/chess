@@ -275,7 +275,8 @@ function openSetup(gameId) {
   const opts = {
     mode: stored.mode === 'pve' ? 'pve' : 'pvp',
     level: [1, 2, 3].includes(stored.level) ? stored.level : 2,
-    humanSeat: stored.humanSeat === 1 ? 1 : 0
+    humanSeat: stored.humanSeat === 1 ? 1 : 0,
+    variant: (meta.variants || []).some(v => v.id === stored.variant) ? stored.variant : ((meta.variants || [])[0] || {}).id || ''
   };
 
   const wrap = document.createElement('div');
@@ -301,6 +302,16 @@ function openSetup(gameId) {
   const refresh = () => {
     const keep = [...fields.querySelectorAll('button')].indexOf(document.activeElement);
     fields.innerHTML = `
+      ${meta.variants ? `
+      <div class="field">
+        <label>玩法</label>
+        <div class="seg">
+          ${meta.variants.map(v => `
+            <button data-variant="${v.id}" class="${opts.variant === v.id ? 'on' : ''}">
+              ${v.label}<small>${v.desc}</small>
+            </button>`).join('')}
+        </div>
+      </div>` : ''}
       <div class="field">
         <label>对战模式</label>
         <div class="seg">
@@ -326,6 +337,9 @@ function openSetup(gameId) {
         </div>
       </div>` : ''}`;
 
+    fields.querySelectorAll('[data-variant]').forEach(btn => {
+      btn.onclick = () => { opts.variant = btn.dataset.variant; refresh(); };
+    });
     fields.querySelectorAll('[data-mode]').forEach(btn => {
       btn.onclick = () => { opts.mode = btn.dataset.mode; refresh(); };
     });
@@ -386,14 +400,17 @@ function updateChrome() {
   const levelName = (LEVELS.find(l => l.v === st.level) || LEVELS[1]).label;
 
   ui.tName.textContent = meta.name;
-  ui.tSub.textContent = st.mode === 'pve' ? `人机对战 · ${levelName}` : '双人对弈 · 同屏轮流';
+  const variant = (meta.variants || []).find(v => v.id === st.variant);
+  const variantTag = variant && variant.id !== meta.variants[0].id ? ` · ${variant.label}` : '';
+  ui.tSub.textContent = (st.mode === 'pve' ? `人机对战 · ${levelName}` : '双人对弈 · 同屏轮流') + variantTag;
 
   const turns = st.seats.map((seat, i) => {
     const color = (meta.seatColors && meta.seatColors[i]) || '#9aa4b2';
     const active = !st.over && st.turn === i;
+    const info = session.mod.seatInfo ? session.mod.seatInfo(st, i) : '';
     return `<div class="seat ${active ? 'active' : ''}">
       <span class="stone-dot" style="background:${color}"></span>
-      ${seat.name}${seat.ai ? '（电脑）' : ''}
+      ${seat.name}${seat.ai ? '（电脑）' : ''}${info ? `<small class="seat-info">${info}</small>` : ''}
     </div>`;
   }).join('');
   ui.seats.innerHTML = turns;

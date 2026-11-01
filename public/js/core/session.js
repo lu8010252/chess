@@ -60,7 +60,8 @@ export class Session {
     this.opts = {
       mode: opts.mode === 'pve' ? 'pve' : 'pvp',
       level: Number(opts.level) || 2,
-      humanSeat: Number(opts.humanSeat) === 1 ? 1 : 0
+      humanSeat: Number(opts.humanSeat) === 1 ? 1 : 0,
+      variant: typeof opts.variant === 'string' ? opts.variant : ''
     };
     this.state = mod.create(this.opts);
     this.gen++;

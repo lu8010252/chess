@@ -28,11 +28,16 @@ export const meta = {
   seatColors: ['#c8402f', '#2f6fb0'],
   aspect: 0.5,
   seats: 2,
+  variants: [
+    { id: 'hidden', label: '暗棋', desc: '对方棋子背面朝上，交战后才翻明' },
+    { id: 'open', label: '明棋', desc: '双方棋子全部朝上，比拼排兵布阵' }
+  ],
   rules: [
     { h: '布阵', p: '开局双方各有 25 枚棋子，自动随机布阵：军旗只能放在大本营，地雷只能放在后两排，炸弹不能放在最前线。开局前可以点「重新布阵」重排。' },
     { h: '行军', p: '普通棋子每步上下左右走一格。铁路（两侧纵线与第 2、5、6、9 横线）上可以直线滑行任意格，前提是路径全空；工兵还能在铁路上拐弯行走。若轮到自己时没有任何棋能走，则停一手。' },
     { h: '行营与大本营', p: '行营中的棋子不会被攻击（但可以主动出击）。大本营中的棋子不能移动出去，用来保护军旗与地雷。' },
     { h: '战斗', p: '司令 > 军长 > 师长 > 旅长 > 团长 > 营长 > 连长 > 排长 > 工兵。同级同归于尽，大吃小。炸弹与任何子同归于尽；地雷不能移动，普通子撞雷阵亡，工兵可挖雷，炸弹碰雷同归于尽。' },
+    { h: '【明棋】玩法', p: '开局选「明棋」：双方所有棋子身份一直朝上，大本营里的军旗、后排的地雷也看得清清楚楚，没有猜测，纯粹比谁走得更巧、布阵更稳。电脑也同样看得见。' },
     { h: '胜利条件', p: '吃掉对方的军旗立即获胜。交战双方的身份会翻明，之后双方都能看到这两枚棋子的真实身份。若 300 回合内双方都未夺得军旗，则按剩余棋子（不含军旗）的子力总和判定胜负。' }
   ],
   tips: [
@@ -166,13 +171,20 @@ export function create(opts = {}) {
     history: [],
     seats: [],
     board: slide,
+    variant: opts.variant === 'open' ? 'open' : 'hidden',
     lastMove: null,
     selected: null,
     hints: [],
     lastMoves: []
   };
+  if (state.variant === 'open') revealAll(state.board);
   state.seats = makeSeats(state, meta.seatNames);
   return state;
+}
+
+/** 明棋：所有棋子身份朝上 */
+function revealAll(board) {
+  for (const p of board) if (p) p.revealed = true;
 }
 
 export function demo() {
@@ -517,6 +529,7 @@ export function action(state, id) {
   pushHistory(state, KEYS);
   deploySide(state.board, 0);
   deploySide(state.board, 1);
+  if (state.variant === 'open') revealAll(state.board);
   state.selected = null;
   state.hints = [];
   state.note = '已重新随机布阵';

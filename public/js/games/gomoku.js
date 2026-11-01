@@ -4,7 +4,10 @@ import { boardSurface, PALETTE, stone, halo } from './_draw.js';
 
 const N = 15;
 const WIN = 5;
-const KEYS = ['board', 'turn', 'lastMove', 'ply', 'over', 'result', 'note', 'winLine'];
+const KEYS = ['board', 'turn', 'lastMove', 'ply', 'over', 'result', 'note', 'winLine', 'hand', 'capture', 'lastEat'];
+
+// 「连五吃子」玩法：每方手里的棋子数
+const HAND = 24;
 
 export const meta = {
   id: 'gomoku',
@@ -16,18 +19,26 @@ export const meta = {
   seatColors: ['#14161a', '#f4efe3'],
   aspect: 1,
   seats: 2,
+  variants: [
+    { id: 'classic', label: '经典五子棋', desc: '先连成五子者胜' },
+    { id: 'capture', label: '连五吃子', desc: `每方 ${HAND} 子，连五吃对方一子，没子者负` }
+  ],
   rules: [
     { h: '棋盘与落子', p: '棋盘为 15×15 条线构成的交叉点（225 个落子点）。双方轮流在空闲交叉点落下一颗棋子，棋子落下后不可移动。' },
     { h: '胜负判定', p: '横、竖、斜任意方向连续五颗同色棋子即为「五连」。五颗以上连续同样算胜。' },
     { h: '先手优势', p: '黑方先行，天然带有先手优势。本作不设禁手规则，双方规则完全对等，适合休闲对弈与新手练习。' },
     { h: '和棋', p: '当 225 个交叉点全部下满仍无人连成五子，判为和棋。' },
+    { h: '【连五吃子】玩法', p: `开局选「连五吃子」。双方各有 ${HAND} 枚棋子，轮流从手里落子。谁连成五子，不算赢：先从棋盘上吃掉对方任意 1 枚棋子（被吃的子永久出局），然后连成五子的这几枚收回自己手里，可以继续用。` },
+    { h: '【连五吃子】怎么分胜负', p: '轮到你时手里已经没有棋子，你就输了；对方连成五子的次数越多，你的子就越少。双方同时用完时，比盘上最长的一条连线，长的赢，一样长才和棋；若一方的棋子（手里 + 棋盘上）全被吃光，也判负。' },
     { h: '常用战术', p: '「活三」指两端都空的三连，对手必须应对；「冲四」指一端被封的四连，只能堵不能挡。同时制造两个威胁（双三、四三）往往能直接取胜。' }
   ],
   tips: [
     '开局优先占据天元（正中心）附近，向四周扩张更灵活。',
     '进攻的同时注意堵住对手的活三，不要只顾自己连子。',
     '斜线方向最容易被忽视，落子前四向都要扫一眼。',
-    '「四三胜」是最常见的制胜手段：一手同时形成冲四和活三，对手只能挡一处。'
+    '「四三胜」是最常见的制胜手段：一手同时形成冲四和活三，对手只能挡一处。',
+    '连五吃子：别把棋子浪费在没用的地方，手里的子用完就输；连五后收回的五子是翻盘的本钱。',
+    '连五吃子：吃子时优先吃掉对方最有威胁的那条线上的棋子，或者打断对方的活三。'
   ]
 };
 
@@ -39,6 +50,10 @@ export function create(opts = {}) {
     id: 'gomoku',
     mode, level, humanSeat,
     turn: 0,
+    variant: opts.variant === 'capture' ? 'capture' : 'classic',
+    hand: [HAND, HAND],
+    capture: false,
+    lastEat: null,
     board: new Array(N * N).fill(0),
     lastMove: null,
     winLine: null,
@@ -90,10 +105,132 @@ function checkWin(board, x, y, color) {
   return null;
 }
 
+/** 数某方在棋盘上的棋子 */
+function onBoard(board, color) {
+  let n = 0;
+  for (let i = 0; i < board.length; i++) if (board[i] === color) n++;
+  return n;
+}
+
+/** 某方在盘上最长的连线（横竖斜）长度 */
+function longestRun(board, color) {
+  let best = 0;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      if (board[y * N + x] !== color) continue;
+      for (const [dx, dy] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+        const px = x - dx;
+        const py = y - dy;
+        if (inside(px, py) && board[py * N + px] === color) continue; // 只从线头开始数
+        let len = 0;
+        let cx = x;
+        let cy = y;
+        while (inside(cx, cy) && board[cy * N + cx] === color) {
+          len++;
+          cx += dx;
+          cy += dy;
+        }
+        if (len > best) best = len;
+      }
+    }
+  }
+  return best;
+}
+
+/** 连五吃子：轮到下一方；手里没子就输 */
+function nextTurn(state) {
+  state.turn = 1 - state.turn;
+  const me = state.turn;
+  const other = 1 - me;
+  if (state.hand[me] <= 0) {
+    if (state.hand[other] <= 0) {
+      // 双方同时用完：比盘上最长的连线，长者胜，一样长则和棋
+      const a = longestRun(state.board, 1);
+      const b = longestRun(state.board, 2);
+      if (a === b) {
+        finish(state, null, `双方的棋子都用完了，最长连线都是 ${a} 子，和棋`, 'empty');
+      } else {
+        const w = a > b ? 0 : 1;
+        finish(state, w, `双方的棋子都用完了，${state.seats[w].name}的连线更长（${Math.max(a, b)} 对 ${Math.min(a, b)}），获胜！`, 'longest');
+      }
+      state.note = state.result.text;
+    } else {
+      finish(state, other, `${state.seats[me].name}手里没有棋子了，${state.seats[other].name}获胜！`, 'nostones');
+      state.note = `${state.seats[me].name}没子了`;
+    }
+    return;
+  }
+  state.note = `轮到${state.seats[me].name}（手里 ${state.hand[me]} 子）`;
+}
+
+/** 连五后收回五子 */
+function clearLine(state) {
+  if (!state.winLine) return;
+  for (const [x, y] of state.winLine) {
+    state.board[y * N + x] = 0;
+    state.hand[state.turn] += 1;
+  }
+  state.winLine = null;
+}
+
+/** 连五吃子：落子 */
+function placeCapture(state, x, y) {
+  pushHistory(state, KEYS);
+  const color = state.turn + 1;
+  state.board[y * N + x] = color;
+  state.hand[state.turn] -= 1;
+  state.lastMove = { x, y };
+  state.lastEat = null;
+  state.ply++;
+
+  const line = checkWin(state.board, x, y, color);
+  if (line) {
+    state.winLine = line;
+    if (onBoard(state.board, 3 - color) === 0) {
+      // 对方盘上没有棋子可吃：直接收回五子，轮到对方
+      clearLine(state);
+      nextTurn(state);
+    } else {
+      state.capture = true;
+      state.note = `${state.seats[state.turn].name}连成五子！点选对方一枚棋子吃掉`;
+    }
+    return true;
+  }
+  nextTurn(state);
+  return true;
+}
+
+/** 连五吃子：吃子 */
+function applyEat(state, ex, ey) {
+  if (!state.capture || !inside(ex, ey)) return false;
+  const oppColor = 2 - state.turn;
+  if (state.board[ey * N + ex] !== oppColor) return false;
+  pushHistory(state, KEYS);
+  state.board[ey * N + ex] = 0;
+  state.lastEat = { x: ex, y: ey };
+  clearLine(state);
+  state.capture = false;
+
+  const opp = 1 - state.turn;
+  if (state.hand[opp] + onBoard(state.board, oppColor) <= 0) {
+    finish(state, state.turn, `${state.seats[opp].name}的棋子被吃光了，${state.seats[state.turn].name}获胜！`, 'eaten');
+    state.note = `${state.seats[opp].name}没子了`;
+    return true;
+  }
+  nextTurn(state);
+  return true;
+}
+
 export function applyMove(state, move) {
   if (!move || state.over) return false;
+  if (move.eat) return applyEat(state, move.eat.x, move.eat.y);
+  if (state.capture) return false;
   const { x, y } = move;
   if (!inside(x, y) || state.board[y * N + x] !== 0) return false;
+  if (state.variant === 'capture') {
+    if (state.hand[state.turn] <= 0) return false;
+    return placeCapture(state, x, y);
+  }
 
   pushHistory(state, KEYS);
   const color = state.turn + 1;
@@ -125,6 +262,11 @@ export function tap(state, pt) {
   if (!inside(gx, gy)) return { ok: false, msg: '请点击棋盘内的交叉点' };
   const cx = L.x0 + gx * L.step, cy = L.y0 + gy * L.step;
   if (Math.hypot(pt.x - cx, pt.y - cy) > L.step * 0.52) return { ok: false, msg: '请点击棋盘交叉点' };
+  if (state.capture) {
+    if (state.board[gy * N + gx] !== 2 - state.turn) return { ok: false, msg: '五连成功！请点选对方的一枚棋子吃掉' };
+    const eaten = applyMove(state, { eat: { x: gx, y: gy } });
+    return { ok: eaten, moved: eaten };
+  }
   if (state.board[gy * N + gx]) return { ok: false, msg: '这里已经有子了' };
   const ok = applyMove(state, { x: gx, y: gy });
   return { ok, moved: ok };
@@ -208,7 +350,33 @@ function bestThreat(board, color) {
   return best;
 }
 
+/** 连五吃子：挑一枚对方棋子吃掉——吃完（且我的五子收回后）对方的最强威胁最小，其次让我自己更有机会 */
+function chooseEat(state) {
+  const me = state.turn + 1;
+  const opp = 3 - me;
+  const base = state.board.slice();
+  for (const [x, y] of state.winLine || []) base[y * N + x] = 0;
+  const level = state.level || 2;
+  const options = [];
+  for (let i = 0; i < base.length; i++) {
+    if (base[i] !== opp) continue;
+    const x = i % N;
+    const y = Math.floor(i / N);
+    base[i] = 0;
+    const oppPower = bestThreat(base, opp);
+    const myPower = bestThreat(base, me);
+    base[i] = opp;
+    options.push({ x, y, val: -oppPower * 1.0 + myPower * 0.2 });
+  }
+  if (!options.length) return null;
+  options.sort((a, b) => b.val - a.val);
+  const pool = level === 1 ? options.slice(0, Math.min(5, options.length)) : level === 2 ? options.slice(0, Math.min(2, options.length)) : options.slice(0, 1);
+  const p = pool[Math.floor(Math.random() * pool.length)];
+  return { eat: { x: p.x, y: p.y } };
+}
+
 export function aiMove(state) {
+  if (state.capture) return chooseEat(state);
   const board = state.board.slice();
   const me = state.turn + 1;
   const opp = 3 - me;
@@ -340,8 +508,35 @@ export function draw(ctx, state, g) {
     }
   }
 
+  // 连五吃子：可以吃的对方棋子都圈出来；上一次被吃掉的位置打个叉
+  if (state.capture) {
+    const oppColor = 2 - state.turn;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (state.board[y * N + x] === oppColor) {
+          halo(ctx, L.x0 + x * L.step, L.y0 + y * L.step, r * 1.08, 'rgba(235,85,65,0.95)', Math.max(2, r * 0.14));
+        }
+      }
+    }
+  }
+  if (state.lastEat) {
+    const ex = L.x0 + state.lastEat.x * L.step;
+    const ey = L.y0 + state.lastEat.y * L.step;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(210,60,45,0.9)';
+    ctx.lineWidth = Math.max(2, r * 0.18);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(ex - r * 0.5, ey - r * 0.5);
+    ctx.lineTo(ex + r * 0.5, ey + r * 0.5);
+    ctx.moveTo(ex + r * 0.5, ey - r * 0.5);
+    ctx.lineTo(ex - r * 0.5, ey + r * 0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // 最后一步标记
-  if (state.lastMove) {
+  if (state.lastMove && state.board[state.lastMove.y * N + state.lastMove.x]) {
     const { x, y } = state.lastMove;
     const cx = L.x0 + x * L.step, cy = L.y0 + y * L.step;
     const c = state.board[y * N + x] === 1 ? 'rgba(255,205,110,0.95)' : 'rgba(230,80,60,0.95)';
@@ -357,9 +552,18 @@ export function cursorPoints(state, g) {
   const L = layout(g.w, g.h);
   const pts = [];
   for (let y = 0; y < N; y++) {
-    for (let x = 0; x < N; x++) pts.push({ x: L.x0 + x * L.step, y: L.y0 + y * L.step, r: L.step * 0.46 });
+    for (let x = 0; x < N; x++) {
+      if (state.capture && state.board[y * N + x] !== 2 - state.turn) continue; // 吃子时只能选对方的子
+      pts.push({ x: L.x0 + x * L.step, y: L.y0 + y * L.step, r: L.step * 0.46 });
+    }
   }
   return pts;
+}
+
+/** 座位条上的补充信息（连五吃子显示手里/盘上的棋子数） */
+export function seatInfo(state, i) {
+  if (state.variant !== 'capture') return '';
+  return `手 ${state.hand[i]} · 盘 ${onBoard(state.board, i + 1)}`;
 }
 
 /** 落子动画：棋子从上方落到交叉点 */
