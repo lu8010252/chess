@@ -1,0 +1,11 @@
+services:
+  chess:
+    build: .
+    image: qige-chess:latest
+    container_name: qige-chess
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: "Asia/Shanghai"
+      PORT: "8787"

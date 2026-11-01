@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#1b2531"/>
+      <stop offset="1" stop-color="#0a0e14"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4d79a"/>
+      <stop offset="1" stop-color="#b8862f"/>
+    </linearGradient>
+    <radialGradient id="blackStone" cx="0.35" cy="0.3" r="0.75">
+      <stop offset="0" stop-color="#7b838d"/>
+      <stop offset="0.45" stop-color="#23272e"/>
+      <stop offset="1" stop-color="#06080b"/>
+    </radialGradient>
+    <radialGradient id="whiteStone" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#f2ecdd"/>
+      <stop offset="1" stop-color="#c8c0ad"/>
+    </radialGradient>
+  </defs>
+  <rect x="12" y="12" width="488" height="488" rx="104" fill="url(#bg)"/>
+  <rect x="12" y="12" width="488" height="488" rx="104" fill="none" stroke="url(#gold)" stroke-width="7"/>
+  <g stroke="rgba(228,185,104,0.55)" stroke-width="5" stroke-linecap="round">
+    <line x1="146" y1="146" x2="366" y2="146"/>
+    <line x1="146" y1="256" x2="366" y2="256"/>
+    <line x1="146" y1="366" x2="366" y2="366"/>
+    <line x1="146" y1="146" x2="146" y2="366"/>
+    <line x1="256" y1="146" x2="256" y2="366"/>
+    <line x1="366" y1="146" x2="366" y2="366"/>
+  </g>
+  <circle cx="256" cy="256" r="46" fill="url(#blackStone)"/>
+  <circle cx="244" cy="243" r="10" fill="rgba(255,255,255,0.45)"/>
+  <circle cx="333" cy="333" r="46" fill="url(#whiteStone)"/>
+  <circle cx="322" cy="321" r="9" fill="rgba(255,255,255,0.95)"/>
+</svg>

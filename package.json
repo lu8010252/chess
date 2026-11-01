@@ -1,0 +1,16 @@
+{
+  "name": "qige-chess",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "棋阁 · 七种棋类（五子棋 / 象棋 / 军棋 / 国际象棋 / 围棋 / 跳棋 / 飞行棋），平板优先，双人与人机对战",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "test": "node tools/selftest.mjs",
+    "icons": "node tools/make-icons.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
