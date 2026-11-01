@@ -3,6 +3,7 @@ import { Session } from './session.js';
 import { GAMES, getGame } from '../games/index.js';
 import { VERSION } from './version.js';
 import { initNav } from './nav.js';
+import { createAnimator } from './anim.js';
 import { initUpdater } from './updater.js';
 
 const LEVELS = [
@@ -22,6 +23,9 @@ let toastTimer = 0;
 let deferredPrompt = null;
 let renderQueued = false;
 let nav = null;
+let animator = null;
+let lastSig = '';
+let lastGen = -1;
 let updater = null;
 
 function loadOpts() {
@@ -100,6 +104,7 @@ function mount() {
   ui.stage = document.getElementById('stage');
   ui.canvas = document.getElementById('board');
   ui.ctx = ui.canvas.getContext('2d');
+  animator = createAnimator(ui.canvas);
   ui.thinking = document.getElementById('thinking');
   ui.toast = document.createElement('div');
   ui.toast.className = 'toast hidden';
@@ -355,6 +360,8 @@ function enterTable() {
   ui.canvas.style.width = '0px';
   ui.canvas.style.height = '0px';
   shownResult = '';
+  lastGen = -1;
+  lastSig = '';
   updateChrome();
   requestAnimationFrame(() => {
     fitBoard();
@@ -406,7 +413,9 @@ function updateChrome() {
     const key = `${st.result.text}|${st.result.reason}`;
     if (shownResult !== key && overlayKind !== 'rules') {
       shownResult = key;
-      showResult(st);
+      setTimeout(() => {
+        if (session.state === st && st.over && overlayKind !== 'rules') showResult(st);
+      }, 700);
     }
   } else if (overlayKind === 'result') {
     closeOverlay();
@@ -435,7 +444,9 @@ function fitBoard() {
   ui.canvas.height = Math.round(h * dpr);
   ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   boardSize = { w, h };
+  animator.stop();
   drawBoard();
+  animator.snapshot();
   nav?.refreshCursor();
 }
 
@@ -444,8 +455,38 @@ function scheduleDraw() {
   renderQueued = true;
   requestAnimationFrame(() => {
     renderQueued = false;
-    drawBoard();
+    paint();
   });
+}
+
+const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** 状态变化后重绘：刚走了一步就播落子/滑动动画，其余情况（选子、悔棋、重开…）直接重画 */
+function paint() {
+  if (!session.mod || !session.state || ui.table.hidden) return;
+  const st = session.state;
+  const sig = JSON.stringify(st.lastMove || null);
+  const forward = session.gen === lastGen && sig !== lastSig && st.lastMove;
+  lastGen = session.gen;
+  lastSig = sig;
+
+  if (forward && !reduceMotion() && typeof session.mod.moveAnim === 'function') {
+    let geo = null;
+    try {
+      geo = session.mod.moveAnim(st, boardSize);
+    } catch (err) {
+      console.warn('[anim]', err);
+    }
+    if (geo) {
+      const extra = geo.path.length > 2 ? (geo.path.length - 2) * 110 : 0;
+      const ms = Math.min(1100, (session.lastBy === 'ai' ? 460 : 260) + extra);
+      animator.play(geo, ms, ui.ctx, boardSize.w, drawBoard);
+      return;
+    }
+  }
+  animator.stop();
+  drawBoard();
+  animator.snapshot();
 }
 
 function drawBoard() {

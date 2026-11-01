@@ -600,3 +600,21 @@ export function cursorPoints(state, g) {
   }
   return pts;
 }
+
+/** 落子动画：棋子从上方落到交叉点 */
+export function moveAnim(state, g) {
+  const m = state.lastMove;
+  if (!m || m.x === undefined) return null;
+  const L = layout(g.w, g.h);
+  const v = state.board[idx(m.x, m.y)];
+  if (!v) return null;
+  const r = L.step * 0.43;
+  const x = L.x0 + m.x * L.step;
+  const y = L.y0 + m.y * L.step;
+  return {
+    kind: 'drop',
+    path: [{ x, y }],
+    r,
+    sprite: (c, px, py) => stone(c, px, py, r, v === 1 ? 'black' : 'white')
+  };
+}

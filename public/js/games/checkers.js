@@ -214,8 +214,10 @@ function allMoves(board, color) {
 /** 用索引计算推进分数 */
 function progressOf(index, color) {
   const h = HOLES[index];
-  const targetRow = color === 1 ? 1.5 : 14.5;
-  return (16 - Math.abs(h.y - targetRow)) * 1.5 + (HOME[index] === (color === 1 ? 1 : 0) ? 26 : 0);
+  const targetRow = color === 1 ? 0 : 16; // 营地尖端：越靠近越「深」，先填满深处才不会堵路
+  // 用到营地尖端的真实几何距离：既奖励向前，也奖励向中间靠拢（边路的棋子不会在原地打转）
+  const d = Math.hypot(h.x * 0.5, (h.y - targetRow) * 0.866);
+  return (20 - d) * 1.5 + (HOME[index] === (color === 1 ? 1 : 0) ? 26 : 0);
 }
 
 /* ---------------- 走子 ---------------- */
@@ -431,10 +433,26 @@ export function action(state, id) {
 function scoreMove(board, move, color) {
   const from = move.from;
   const to = move.end !== undefined ? move.end : move.path[move.path.length - 1];
-  let score = progressOf(to, color) - progressOf(from, color);
-  score += move.hops * 2.2;
-  if (HOME[to] === (color === 1 ? 1 : 0)) score += 18;
-  // 离开己方营地，方便后续棋子进入
+  const target = color === 1 ? 1 : 0; // 目标营地编号
+  const fromHome = HOME[from] === target;
+  const toHome = HOME[to] === target;
+  const targetRow = color === 1 ? 0 : 16; // 营地尖端：越靠近越「深」，先填满深处才不会堵路
+
+  // 推进分里已经含「进入目标营地」的加成，这里不再重复奖励
+  const delta = progressOf(to, color) - progressOf(from, color);
+  // 连跳的奖励只发给「净推进」的走法：否则长跳跳过去再跳回来也能拿高分，就会来回横跳
+  let score = delta > 0 ? delta + move.hops * 1.2 : delta - 2;
+
+  if (fromHome && !toHome) score -= 60; // 已到位的棋子绝不再出来
+  if (fromHome && toHome) {
+    // 营地内只许往更深处挪（给后面的棋子腾位置），来回挪动一律不给分，避免原地横跳
+    const deeper = Math.abs(HOLES[to].y - targetRow) < Math.abs(HOLES[from].y - targetRow);
+    score = deeper ? Math.min(score, 3) : -30;
+  }
+
+  // 落在后排的棋子更需要动：离目标越远，挪动它的价值越高，让整支队伍一起前进
+  if (!fromHome) score += Math.abs(HOLES[from].y - targetRow) * 0.18;
+  // 离开己方出发营地，方便后续棋子进入
   if (HOME[from] === (color === 1 ? 0 : 1)) score += 4;
   return score;
 }
@@ -451,8 +469,10 @@ export function aiMove(state) {
   for (const m of moves) m.score = scoreMove(board, m, color);
 
   if (level === 1) {
-    const pool = moves.map(m => ({ ...m, score: m.score + Math.random() * 10 }));
-    pool.sort((a, b) => b.score - a.score);
+    // 简单：在「往前走」的候选里随机挑，偶尔不是最优，但不会来回倒退
+    const fwd = moves.filter(m => m.score > 0);
+    const base = (fwd.length ? fwd : moves).map(m => ({ ...m, score: m.score + Math.random() * 8 }));
+    const pool = base.sort((a, b) => b.score - a.score);
     const top = pool.slice(0, Math.max(2, Math.ceil(pool.length * 0.4)));
     const pick = top[Math.floor(Math.random() * top.length)];
     return { path: pick.path };
@@ -463,7 +483,9 @@ export function aiMove(state) {
 
   if (level >= 3) {
     const deadline = Date.now() + 1400;
-    const top = moves.slice(0, Math.min(6, moves.length));
+    // 只在「推进幅度接近最优」的走法里权衡对手威胁，不让它为了防守而倒退、来回跳
+    const floor = moves[0].score - 6;
+    const top = moves.filter(m => m.score >= floor).slice(0, 6);
     let bestVal = -Infinity;
     for (const m of top) {
       const test = board.slice();
@@ -474,7 +496,7 @@ export function aiMove(state) {
       const enemy = 3 - color;
       const replies = allMoves(test, enemy).sort((a, b) => b.score - a.score);
       const threat = replies.length ? scoreMove(test, replies[0], enemy) : 0;
-      const val = m.score - threat * 0.55;
+      const val = m.score - threat * 0.3;
       if (val > bestVal) {
         bestVal = val;
         best = m;
@@ -613,4 +635,17 @@ export function cursorPoints(state, g) {
     pts.push({ x: p.x, y: p.y, r: L.unit * 0.5 });
   }
   return pts;
+}
+
+/** 走子动画：沿着连跳路径一步步滑过去（直接截取新画面里的棋子图像） */
+export function moveAnim(state, g) {
+  const m = state.lastMove;
+  if (!m || !m.path || m.path.length < 2) return null;
+  const L = layout(g.w, g.h);
+  return {
+    kind: 'slide',
+    path: m.path.map(i => holePos(i, L)),
+    r: L.unit * 0.46,
+    shape: 'circle'
+  };
 }

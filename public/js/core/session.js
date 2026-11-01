@@ -30,6 +30,7 @@ export class Session {
     this.reqId = 0;
     this.gen = 0;
     this.busy = false;
+    this.lastBy = 'human';
 
     this.saved = readSave();
   }
@@ -101,6 +102,7 @@ export class Session {
     if (!this.state || this.busy || this.state.over) return null;
     if (this.isAITurn()) return null;
     const res = this.mod.tap(this.state, { x, y, w, h }) || { ok: true, moved: false };
+    this.lastBy = 'human';
     this.emit();
     if (res.moved) {
       this.save();
@@ -157,8 +159,13 @@ export class Session {
     this.emit();
     const gen = this.gen;
     const payload = cloneForAI(this.state);
+    const t0 = Date.now();
     try {
       const move = await this.think(payload);
+      if (gen !== this.gen || !this.state) return;
+      // 电脑「想一会儿」再落子：算得再快也至少停顿一下，才有一来一回下棋的感觉
+      const wait = this.aiDelay() - (Date.now() - t0);
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
       if (gen !== this.gen || !this.state) return;
       if (move) this.mod.applyMove(this.state, move);
     } catch (err) {
@@ -166,10 +173,19 @@ export class Session {
     }
     if (gen !== this.gen) return;
     this.busy = false;
+    this.lastBy = 'ai';
     this.save();
     this.emit();
     // 若轮到电脑（人机对局中连续思考）则继续
     if (this.isAITurn()) this.maybeAI();
+  }
+
+  /** 电脑每一步的最短思考时间（毫秒）：水平越高停得越久；飞行棋的掷骰/走子各算一步，停得短些 */
+  aiDelay() {
+    const level = (this.state && this.state.level) || 2;
+    let [lo, hi] = { 1: [600, 1000], 2: [800, 1400], 3: [1000, 1700] }[level] || [800, 1400];
+    if (this.gameId === 'aeroplane') [lo, hi] = [500, 850];
+    return lo + Math.random() * (hi - lo);
   }
 
   async think(payload) {

@@ -796,3 +796,21 @@ export function cursorPoints(state, g) {
   }
   return pts;
 }
+
+/** 走子动画：棋子从起点滑到终点（吃子时先显示被吃的子，到位后才消失） */
+export function moveAnim(state, g) {
+  const m = state.lastMove;
+  if (!m || !m.from || !m.to) return null;
+  const L = layout(g.w, g.h);
+  const v = state.board[idx(m.to.x, m.to.y)];
+  if (!v) return null;
+  const pt = p => ({ x: L.x0 + p.x * L.step, y: L.y0 + p.y * L.step });
+  const r = L.step * 0.44;
+  return {
+    kind: 'slide',
+    path: [pt(m.from), pt(m.to)],
+    r,
+    shape: 'circle',
+    sprite: (c, px, py) => discPiece(c, px, py, r, v > 0 ? 'red' : 'black', pieceName(v), r * 1.12)
+  };
+}

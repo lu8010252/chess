@@ -826,3 +826,20 @@ export function cursorPoints(state, g) {
   }
   return pts;
 }
+
+/** 走子动画：棋子从起点滑到终点 */
+export function moveAnim(state, g) {
+  const m = state.lastMove;
+  if (!m || !m.from || !m.to) return null;
+  const L = layout(g.w, g.h);
+  const v = state.board[idx(m.to.x, m.to.y)];
+  if (!v) return null;
+  const pt = p => ({ x: L.x0 + (p.x + 0.5) * L.cell, y: L.y0 + (p.y + 0.5) * L.cell });
+  return {
+    kind: 'slide',
+    path: [pt(m.from), pt(m.to)],
+    r: L.cell * 0.5,
+    shape: 'rect',
+    sprite: (c, px, py) => chessPiece(c, Math.abs(v), px, py, L.cell * 0.92, v > 0)
+  };
+}

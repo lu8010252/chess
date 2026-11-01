@@ -815,3 +815,12 @@ export function cursorPoints(state, g) {
   const L = layout(g.w, g.h);
   return POSITIONS.map(p => ({ x: L.x0 + (p.x + 0.5) * L.cell, y: L.y0 + (p.y + 0.5) * L.cell, r: L.cell * 0.46 }));
 }
+
+/** 走子动画：棋子从起点滑到终点（直接截取新画面里的棋子图像） */
+export function moveAnim(state, g) {
+  const m = state.lastMove;
+  if (!m || !m.from || !m.to) return null;
+  const L = layout(g.w, g.h);
+  const pt = p => ({ x: L.x0 + (p.x + 0.5) * L.cell, y: L.y0 + (p.y + 0.5) * L.cell });
+  return { kind: 'slide', path: [pt(m.from), pt(m.to)], r: L.cell * 0.47, shape: 'rect' };
+}
