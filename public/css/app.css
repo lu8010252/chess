@@ -328,8 +328,8 @@ button {
 .hidden { display: none !important; }
 
 .toast {
-  position: absolute;
-  bottom: 18px;
+  position: fixed;
+  bottom: calc(var(--safe-b) + 24px);
   left: 50%;
   transform: translateX(-50%);
   max-width: 78%;
@@ -339,7 +339,9 @@ button {
   border: 1px solid var(--line);
   font-size: 14px;
   text-align: center;
-  z-index: 4;
+  z-index: 40;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
   animation: rise 0.24s ease;
 }
 
@@ -676,4 +678,54 @@ body.immersive .stage { padding: max(8px, var(--safe-t)) max(8px, var(--safe-r))
   .game-actions .btn { padding: 0 12px; font-size: 13px; }
   .note { display: none; }
   .bottombar { gap: 8px; }
+}
+
+/* ============ 细节打磨 ============ */
+
+/* 首页卡片依次淡入 */
+.game-card {
+  animation: card-in 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 键盘 / 遥控器聚焦可见 */
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.btn.gold:hover { filter: brightness(1.06); }
+.sheet .primary:hover { filter: brightness(1.06); }
+.sheet .secondary:hover,
+.seg button:hover { border-color: rgba(228, 185, 104, 0.4); }
+
+.brand-mark { animation: glow 5s ease-in-out infinite; }
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 10px 24px rgba(190, 140, 50, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+  50% { box-shadow: 0 12px 34px rgba(228, 185, 104, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+}
+
+.result-card .big { filter: drop-shadow(0 6px 18px rgba(228, 185, 104, 0.35)); }
+.result-card .row { flex-wrap: wrap; }
+.result-card .row .btn { min-width: 110px; }
+
+/* 触屏设备不做悬停上浮，避免点完卡片「粘住」 */
+@media (hover: none) {
+  .game-card:hover { transform: none; box-shadow: none; border-color: var(--line); }
+  .btn:hover { background: var(--panel-2); }
+}
+
+/* 低动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

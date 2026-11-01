@@ -1,6 +1,7 @@
 // 零依赖静态文件服务：为 /public 提供静态资源，支持 SPA 回退与弱缓存策略
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { gzipSync } from 'node:zlib';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,8 +25,17 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8'
 };
 
+const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.webmanifest', '.svg', '.txt', '.md']);
+const gzCache = new Map();
+
 function resolvePath(urlPath) {
-  const clean = normalize(decodeURIComponent(urlPath.split('?')[0]).replace(/\/+$/g, '') || '/');
+  let decoded;
+  try {
+    decoded = decodeURIComponent(urlPath.split('?')[0]);
+  } catch {
+    return null; // 形如 /%E0%A4%A 的坏编码，直接 400
+  }
+  const clean = normalize(decoded.replace(/\/+$/g, '') || '/');
   if (clean.includes('..')) return null;
   return clean === '/' ? join(ROOT, 'index.html') : join(ROOT, clean);
 }
@@ -50,14 +60,27 @@ const server = createServer(async (req, res) => {
       return res.end();
     }
 
-    res.writeHead(200, {
+    const headers = {
       'content-type': MIME[ext] || 'application/octet-stream',
-      'content-length': body.length,
       'cache-control': ext === '.html' || ext === '.js' ? 'no-cache' : 'public, max-age=86400',
       etag,
+      'x-content-type-options': 'nosniff',
       // PWA 在子路径部署时也能正常工作
       'service-worker-allowed': '/'
-    });
+    };
+
+    // 文本类资源 gzip 压缩（结果按 etag 缓存在内存里，只压一次）
+    if (COMPRESSIBLE.has(ext) && body.length > 1024 && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+      let zipped = gzCache.get(etag);
+      if (!zipped) {
+        zipped = gzipSync(body);
+        gzCache.set(etag, zipped);
+      }
+      res.writeHead(200, { ...headers, 'content-encoding': 'gzip', vary: 'accept-encoding', 'content-length': zipped.length });
+      return res.end(zipped);
+    }
+
+    res.writeHead(200, { ...headers, 'content-length': body.length });
     res.end(body);
   } catch (err) {
     if (err.code === 'ENOENT' || err.code === 'ENOTDIR') {

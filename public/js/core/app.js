@@ -73,7 +73,6 @@ function mount() {
       <div class="stage" id="stage">
         <canvas id="board" width="640" height="640"></canvas>
         <div class="thinking hidden" id="thinking"><span class="dot"></span>电脑思考中…</div>
-        <div class="toast hidden" id="toast"></div>
       </div>
 
       <footer class="bottombar">
@@ -96,7 +95,10 @@ function mount() {
   ui.canvas = document.getElementById('board');
   ui.ctx = ui.canvas.getContext('2d');
   ui.thinking = document.getElementById('thinking');
-  ui.toast = document.getElementById('toast');
+  ui.toast = document.createElement('div');
+  ui.toast.className = 'toast hidden';
+  ui.toast.setAttribute('role', 'status');
+  document.body.appendChild(ui.toast);
   ui.seats = document.getElementById('seats');
   ui.note = document.getElementById('note');
   ui.actions = document.getElementById('actions');
@@ -126,6 +128,11 @@ function mount() {
   ui.actions.addEventListener('click', ev => {
     const btn = ev.target.closest('[data-action]');
     if (!btn) return;
+    if (btn.dataset.action === '__again') {
+      shownResult = '';
+      session.restart();
+      return;
+    }
     const res = session.action(btn.dataset.action);
     if (res && res.ok === false && res.msg) toast(res.msg);
   });
@@ -164,6 +171,7 @@ function renderHome() {
     const card = document.createElement('button');
     card.className = 'game-card';
     card.dataset.id = mod.meta.id;
+    card.style.setProperty('--i', String(GAMES.indexOf(mod)));
     card.innerHTML = `
       <div class="thumb"><canvas></canvas></div>
       <div class="card-meta">
@@ -181,7 +189,7 @@ function renderHome() {
   if (session.hasSaved()) {
     actions.push(`<button class="btn gold" id="btn-resume">继续上局${session.state ? '：' + session.meta.name : ''}</button>`);
   }
-  actions.push(`<button class="btn" id="btn-install">安装到桌面</button>`);
+  if (!isStandalone()) actions.push(`<button class="btn" id="btn-install">安装到桌面</button>`);
   actions.push(`<button class="btn ghost" id="btn-home-full">全屏</button>`);
   ui.homeActions.innerHTML = actions.join('');
 
@@ -195,8 +203,15 @@ function renderHome() {
       enterTable();
     };
   }
-  document.getElementById('btn-install').onclick = installApp;
+  const installBtn = document.getElementById('btn-install');
+  if (installBtn) installBtn.onclick = installApp;
   document.getElementById('btn-home-full').onclick = toggleFullscreen;
+}
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches
+    || window.navigator.standalone === true;
 }
 
 function drawThumb(canvas, mod) {
@@ -250,7 +265,6 @@ function openSetup(gameId) {
   const fields = wrap.querySelector('#setup-fields');
 
   const refresh = () => {
-    const levelName = (LEVELS.find(l => l.v === opts.level) || LEVELS[1]).label;
     fields.innerHTML = `
       <div class="field">
         <label>对战模式</label>
@@ -286,7 +300,6 @@ function openSetup(gameId) {
     fields.querySelectorAll('[data-seat]').forEach(btn => {
       btn.onclick = () => { opts.humanSeat = Number(btn.dataset.seat); refresh(); };
     });
-    void levelName;
   };
   refresh();
 
@@ -296,7 +309,7 @@ function openSetup(gameId) {
     session.start(gameId, opts);
     enterTable();
   };
-  wrap.querySelector('[data-rules]').onclick = () => openRules(mod);
+  wrap.querySelector('[data-rules]').onclick = () => openRules(mod, () => openSetup(gameId));
 }
 
 /* ---------------- 对局页 ---------------- */
@@ -350,6 +363,7 @@ function updateChrome() {
   undoBtn.disabled = !(st.history && st.history.length) || session.busy;
 
   const actions = session.mod.actions ? session.mod.actions(st) : [];
+  if (st.over) actions.push({ id: '__again', label: '再来一局', primary: true });
   ui.actions.innerHTML = actions.map(a => `
     <button class="btn ${a.primary ? 'gold' : 'ghost'}" data-action="${a.id}">${a.label}</button>`).join('');
 
@@ -427,7 +441,7 @@ function closeOverlay() {
   overlayKind = null;
 }
 
-function openRules(mod) {
+function openRules(mod, back) {
   if (!mod) return;
   const meta = mod.meta;
   const wrap = document.createElement('div');
@@ -451,26 +465,28 @@ function openRules(mod) {
       </div>
       <div class="tips-title">实战小贴士</div>
       <ul class="tips">${meta.tips.map(t => `<li>${t}</li>`).join('')}</ul>
-      <button class="primary" data-close>知道了，开始下棋</button>
+      <button class="primary" data-close>${back ? '看懂了，去开局' : '知道了，继续下棋'}</button>
     </div>`;
   showOverlay(wrap, 'rules');
   drawThumb(wrap.querySelector('canvas'), mod);
   wrap.querySelector('[data-close]').onclick = () => {
     closeOverlay();
-    if (session.state && !ui.table.hidden) return;
+    if (back) back();
   };
 }
 
 function showResult(st) {
   const r = st.result;
+  const plies = Number.isFinite(st.ply) ? st.ply : (st.history ? st.history.length : null);
   const wrap = document.createElement('div');
   wrap.className = 'overlay';
   wrap.innerHTML = `
     <div class="result-card">
       <div class="big">${r.text}</div>
-      <div class="sub">${st.mode === 'pve' ? '人机对战' : '双人对弈'} · 共 ${st.ply ?? ''} 手</div>
+      <div class="sub">${st.mode === 'pve' ? '人机对战' : '双人对弈'}${plies ? ` · 共 ${plies} 手` : ''}</div>
       <div class="row">
         <button class="btn gold" data-r="again">再来一局</button>
+        <button class="btn" data-r="view">看看棋盘</button>
         <button class="btn" data-r="home">返回首页</button>
       </div>
     </div>`;
@@ -480,6 +496,7 @@ function showResult(st) {
     shownResult = '';
     session.restart();
   };
+  wrap.querySelector('[data-r="view"]').onclick = () => closeOverlay();
   wrap.querySelector('[data-r="home"]').onclick = () => {
     closeOverlay();
     shownResult = '';
@@ -494,6 +511,10 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => ui.toast.classList.add('hidden'), 1900);
 }
+
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && overlay) closeOverlay();
+});
 
 /* ---------------- 全屏 / 安装 ---------------- */
 

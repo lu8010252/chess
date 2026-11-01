@@ -1,5 +1,5 @@
 // 离线缓存：安装后可断网使用
-const VERSION = 'qige-v2';
+const VERSION = 'qige-v3';
 const CACHE = `${VERSION}-static`;
 
 const ASSETS = [
@@ -71,14 +71,18 @@ self.addEventListener('fetch', event => {
   // 静态资源：缓存优先，后台更新
   event.respondWith(
     caches.match(req).then(hit => {
-      if (hit) return hit;
-      return fetch(req).then(res => {
+      const refresh = fetch(req).then(res => {
         if (res.ok && res.type === 'basic') {
           const copy = res.clone();
           caches.open(CACHE).then(cache => cache.put(req, copy)).catch(() => {});
         }
         return res;
       });
+      if (hit) {
+        refresh.catch(() => {}); // 先给缓存，后台静默更新，下次打开就是新版
+        return hit;
+      }
+      return refresh;
     })
   );
 });
