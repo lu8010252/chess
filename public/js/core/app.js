@@ -2,6 +2,8 @@
 import { Session } from './session.js';
 import { GAMES, getGame } from '../games/index.js';
 import { VERSION } from './version.js';
+import { initNav } from './nav.js';
+import { initUpdater } from './updater.js';
 
 const LEVELS = [
   { v: 1, label: '简单', desc: '轻松上手' },
@@ -19,6 +21,8 @@ let shownResult = '';
 let toastTimer = 0;
 let deferredPrompt = null;
 let renderQueued = false;
+let nav = null;
+let updater = null;
 
 function loadOpts() {
   try {
@@ -152,9 +156,28 @@ function mount() {
   session.onChange(() => {
     updateChrome();
     scheduleDraw();
+    nav?.refreshCursor();
+  });
+
+  nav = initNav({
+    session,
+    ui,
+    getBoardSize: () => boardSize,
+    getOverlay: () => overlay,
+    isOverlayOpen: () => !!overlay,
+    closeOverlay: () => closeOverlay(),
+    isTable: () => !ui.table.hidden,
+    goHome: () => goHome(),
+    toast: msg => toast(msg)
+  });
+  updater = initUpdater({
+    showOverlay: (el, kind) => showOverlay(el, kind),
+    closeOverlay: () => closeOverlay(),
+    toast: msg => toast(msg)
   });
 
   renderHome();
+  updater.autoCheck();
   window.addEventListener('beforeinstallprompt', ev => {
     ev.preventDefault();
     deferredPrompt = ev;
@@ -191,7 +214,8 @@ function renderHome() {
   if (session.hasSaved()) {
     actions.push(`<button class="btn gold" id="btn-resume">继续上局${session.state ? '：' + session.meta.name : ''}</button>`);
   }
-  if (!isStandalone()) actions.push(`<button class="btn" id="btn-install">安装到桌面</button>`);
+  if (updater && updater.available()) actions.push(`<button class="btn" id="btn-update">检查更新</button>`);
+  if (!isStandalone() && !(updater && updater.available())) actions.push(`<button class="btn" id="btn-install">安装到桌面</button>`);
   actions.push(`<button class="btn ghost" id="btn-home-full">全屏</button>`);
   ui.homeActions.innerHTML = actions.join('');
 
@@ -205,6 +229,8 @@ function renderHome() {
       enterTable();
     };
   }
+  const updateBtn = document.getElementById('btn-update');
+  if (updateBtn) updateBtn.onclick = () => updater.open();
   const installBtn = document.getElementById('btn-install');
   if (installBtn) installBtn.onclick = installApp;
   document.getElementById('btn-home-full').onclick = toggleFullscreen;
@@ -268,6 +294,7 @@ function openSetup(gameId) {
   const fields = wrap.querySelector('#setup-fields');
 
   const refresh = () => {
+    const keep = [...fields.querySelectorAll('button')].indexOf(document.activeElement);
     fields.innerHTML = `
       <div class="field">
         <label>对战模式</label>
@@ -303,6 +330,7 @@ function openSetup(gameId) {
     fields.querySelectorAll('[data-seat]').forEach(btn => {
       btn.onclick = () => { opts.humanSeat = Number(btn.dataset.seat); refresh(); };
     });
+    if (keep >= 0) fields.querySelectorAll('button')[keep]?.focus({ preventScroll: true });
   };
   refresh();
 
@@ -328,7 +356,10 @@ function enterTable() {
   ui.canvas.style.height = '0px';
   shownResult = '';
   updateChrome();
-  requestAnimationFrame(fitBoard);
+  requestAnimationFrame(() => {
+    fitBoard();
+    nav?.afterEnterTable();
+  });
 }
 
 function goHome() {
@@ -338,6 +369,7 @@ function goHome() {
   exitImmersive();
   if (overlayKind === 'result') closeOverlay();
   renderHome();
+  nav?.afterGoHome();
 }
 
 function updateChrome() {
@@ -404,6 +436,7 @@ function fitBoard() {
   ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   boardSize = { w, h };
   drawBoard();
+  nav?.refreshCursor();
 }
 
 function scheduleDraw() {
@@ -432,6 +465,7 @@ function showOverlay(el, kind) {
   closeOverlay();
   overlay = el;
   overlayKind = kind;
+  nav?.onOverlayOpened(el);
   document.body.appendChild(el);
   el.addEventListener('pointerdown', ev => {
     if (ev.target === el && kind !== 'result') closeOverlay();
@@ -439,9 +473,11 @@ function showOverlay(el, kind) {
 }
 
 function closeOverlay() {
+  const had = !!overlay;
   if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
   overlay = null;
   overlayKind = null;
+  if (had) nav?.onOverlayClosed();
 }
 
 function openRules(mod, back) {
@@ -514,10 +550,6 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => ui.toast.classList.add('hidden'), 1900);
 }
-
-document.addEventListener('keydown', ev => {
-  if (ev.key === 'Escape' && overlay) closeOverlay();
-});
 
 /* ---------------- 全屏 / 安装 ---------------- */
 

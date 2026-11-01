@@ -738,3 +738,17 @@ export function draw(ctx, state, g) {
 
   ctx.restore();
 }
+
+/** 遥控器 / 键盘光标：只停靠当前可走（闪动）的飞机；还没掷骰子时没有点位 */
+export function cursorPoints(state, g) {
+  if (!state || state.over || !state.planes || state.phase === 'roll') return [];
+  const L = layout(g.w, g.h);
+  const pos = planeLayout(state, g.w, g.h);
+  const hints = state.hints || [];
+  const pts = [];
+  for (const i of hints) {
+    const q = pos[i];
+    if (q) pts.push({ x: q.x, y: q.y, r: L.cell * 0.55 });
+  }
+  return pts;
+}

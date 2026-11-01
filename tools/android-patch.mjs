@@ -51,4 +51,191 @@ if (existsSync(stylesPath)) {
   st = st.replace(/(<style name="AppTheme\.NoActionBar"[^>]*>)/, '$1\n        <item name="android:windowFullscreen">true</item>');
   writeFileSync(stylesPath, st);
 }
+
+// ---------- 电视 / 投影适配 + 在线更新所需的清单与插件 ----------
+const manifestPath = join(app, 'src/main/AndroidManifest.xml');
+let mf = readFileSync(manifestPath, 'utf8');
+
+// 权限与硬件声明：无触屏设备（电视、投影）也能安装；允许安装下载的 APK；允许 http 更新服务器
+mf = mf.replace(
+  /(<uses-permission android:name="android\.permission\.INTERNET"\s*\/>)/,
+  `$1
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />`
+);
+mf = mf.replace('<application', '<application\n        android:usesCleartextTraffic="true"\n        android:banner="@drawable/tv_banner"');
+// 同时出现在手机桌面和电视主屏
+mf = mf.replace(
+  /(<category android:name="android\.intent\.category\.LAUNCHER"\s*\/>)/,
+  '$1\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />'
+);
+writeFileSync(manifestPath, mf);
+
+// 电视主屏横幅 320x180
+const bannerPy = `
+from PIL import Image, ImageDraw
+W, H = 320, 180
+bg = Image.new('RGBA', (W, H))
+d = ImageDraw.Draw(bg)
+for y in range(H):
+    t = y / H
+    d.line([(0, y), (W, y)], fill=(int(28 - 14 * t), int(37 - 18 * t), int(52 - 24 * t), 255))
+icon = Image.open('public/icons/icon-512.png').convert('RGBA').resize((124, 124), Image.LANCZOS)
+bg.alpha_composite(icon, ((W - 124) // 2, (H - 124) // 2))
+bg.convert('RGB').save('android/app/src/main/res/drawable/tv_banner.png')
+`;
+execFileSync('python3', ['-c', bannerPy], { stdio: 'inherit' });
+
+// 原生插件：下载 APK + 唤起系统安装器
+const pkgDir = join(app, 'src/main/java/com/lu8010252/qige');
+const plugin = `package com.lu8010252.qige;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+
+import androidx.core.content.FileProvider;
+
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+@CapacitorPlugin(name = "ApkUpdater")
+public class ApkUpdaterPlugin extends Plugin {
+
+    private File apkFile() {
+        File dir = new File(getContext().getCacheDir(), "updates");
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        return new File(dir, "update.apk");
+    }
+
+    // 手动跟随重定向（GitHub 下载会 302 到另一个域名，也可能 http 跳 https）
+    private HttpURLConnection open(String url) throws IOException {
+        String cur = url;
+        for (int i = 0; i < 6; i++) {
+            HttpURLConnection c = (HttpURLConnection) new URL(cur).openConnection();
+            c.setInstanceFollowRedirects(false);
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(30000);
+            c.setRequestProperty("User-Agent", "qige-chess");
+            int code = c.getResponseCode();
+            if (code >= 300 && code < 400) {
+                String loc = c.getHeaderField("Location");
+                c.disconnect();
+                if (loc == null) throw new IOException("重定向缺少地址");
+                cur = new URL(new URL(cur), loc).toString();
+                continue;
+            }
+            if (code != 200) {
+                c.disconnect();
+                throw new IOException("HTTP " + code);
+            }
+            return c;
+        }
+        throw new IOException("重定向次数过多");
+    }
+
+    @PluginMethod
+    public void download(final PluginCall call) {
+        final String url = call.getString("url");
+        if (url == null || url.isEmpty()) {
+            call.reject("缺少下载地址");
+            return;
+        }
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            try {
+                conn = open(url);
+                long total = conn.getContentLengthLong();
+                File out = apkFile();
+                long got = 0;
+                long last = 0;
+                try (InputStream in = conn.getInputStream(); FileOutputStream fos = new FileOutputStream(out)) {
+                    byte[] buf = new byte[64 * 1024];
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
+                        fos.write(buf, 0, n);
+                        got += n;
+                        long now = System.currentTimeMillis();
+                        if (now - last > 250) {
+                            last = now;
+                            JSObject o = new JSObject();
+                            o.put("received", got);
+                            o.put("total", total);
+                            notifyListeners("progress", o);
+                        }
+                    }
+                }
+                if (total > 0 && got != total) {
+                    //noinspection ResultOfMethodCallIgnored
+                    out.delete();
+                    throw new IOException("下载不完整，请重试");
+                }
+                JSObject o = new JSObject();
+                o.put("received", got);
+                o.put("total", total > 0 ? total : got);
+                notifyListeners("progress", o);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("下载失败：" + e.getMessage());
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        }).start();
+    }
+
+    @PluginMethod
+    public void install(PluginCall call) {
+        File f = apkFile();
+        if (!f.exists()) {
+            call.reject("没有已下载的安装包");
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 26 && !getContext().getPackageManager().canRequestPackageInstalls()) {
+            // Android 8+ 需要先给本应用开「安装未知应用」，跳到系统设置页
+            Intent s = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+            s.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(s);
+            call.reject("need_permission");
+            return;
+        }
+        Uri uri = FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", f);
+        Intent i = new Intent(Intent.ACTION_VIEW);
+        i.setDataAndType(uri, "application/vnd.android.package-archive");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(i);
+        call.resolve();
+    }
+}
+`;
+writeFileSync(join(pkgDir, 'ApkUpdaterPlugin.java'), plugin);
+
+const mainActivity = `package com.lu8010252.qige;
+
+import android.os.Bundle;
+
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(ApkUpdaterPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+}
+`;
+writeFileSync(join(pkgDir, 'MainActivity.java'), mainActivity);
+
 console.log(`已定制 Android 工程：v${versionName} (${versionCode})，res: ${readdirSync(join(app, 'src/main/res')).join(', ')}`);

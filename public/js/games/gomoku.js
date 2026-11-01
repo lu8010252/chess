@@ -351,3 +351,13 @@ export function draw(ctx, state, g) {
     ctx.fill();
   }
 }
+
+/** 遥控器 / 键盘光标可停靠的点位（画布像素坐标） */
+export function cursorPoints(state, g) {
+  const L = layout(g.w, g.h);
+  const pts = [];
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) pts.push({ x: L.x0 + x * L.step, y: L.y0 + y * L.step, r: L.step * 0.46 });
+  }
+  return pts;
+}

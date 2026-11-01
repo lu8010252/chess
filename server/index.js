@@ -2,6 +2,7 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
+import { Readable } from 'node:stream';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,7 +41,57 @@ function resolvePath(urlPath) {
   return clean === '/' ? join(ROOT, 'index.html') : join(ROOT, clean);
 }
 
+// ---- 在线更新代理：APK 内的「检查更新」可以指向本站，由本服务器去 GitHub 取最新发布 ----
+const REPO = process.env.GITHUB_REPO || 'lu8010252/chess';
+const GH_HEADERS = {
+  'user-agent': 'qige-chess-update',
+  accept: 'application/vnd.github+json',
+  ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {})
+};
+let latestCache = { at: 0, data: null };
+
+async function latestRelease() {
+  if (latestCache.data && Date.now() - latestCache.at < 10 * 60 * 1000) return latestCache.data;
+  const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: GH_HEADERS });
+  if (!r.ok) throw new Error(`GitHub ${r.status}`);
+  const j = await r.json();
+  const asset = (j.assets || []).find(a => /\.apk$/i.test(a.name));
+  if (!asset) throw new Error('最新发布里没有 APK');
+  latestCache = {
+    at: Date.now(),
+    data: { version: j.tag_name, notes: j.body || '', size: asset.size, url: asset.browser_download_url, name: asset.name }
+  };
+  return latestCache.data;
+}
+
+async function handleUpdate(req, res, pathname) {
+  try {
+    const rel = await latestRelease();
+    if (pathname === '/api/update') {
+      const body = JSON.stringify({ version: rel.version, notes: rel.notes, size: rel.size, apkUrl: '/api/update/apk' });
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache', 'access-control-allow-origin': '*' });
+      return res.end(body);
+    }
+    const up = await fetch(rel.url, { headers: { 'user-agent': 'qige-chess-update' }, redirect: 'follow' });
+    if (!up.ok || !up.body) throw new Error(`下载 ${up.status}`);
+    const headers = {
+      'content-type': 'application/vnd.android.package-archive',
+      'content-disposition': `attachment; filename="${rel.name}"`,
+      'access-control-allow-origin': '*'
+    };
+    const len = up.headers.get('content-length');
+    if (len) headers['content-length'] = len;
+    res.writeHead(200, headers);
+    Readable.fromWeb(up.body).on('error', () => res.destroy()).pipe(res);
+  } catch (err) {
+    res.writeHead(502, { 'content-type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: String(err.message || err) }));
+  }
+}
+
 const server = createServer(async (req, res) => {
+  const pathname = (req.url || '/').split('?')[0];
+  if (pathname === '/api/update' || pathname === '/api/update/apk') return handleUpdate(req, res, pathname);
   const filePath = resolvePath(req.url || '/');
   if (!filePath) {
     res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' });

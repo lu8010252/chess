@@ -603,3 +603,14 @@ export function draw(ctx, state, g) {
     boardLabel(ctx, state.chain ? '连跳中' : `${state.seats[state.turn].name}行棋`, w / 2, h - L.unit * 0.5, Math.max(10, L.unit * 0.34), 'rgba(226,244,232,0.62)');
   }
 }
+
+/** 遥控器 / 键盘光标可停靠的点位（画布像素坐标） */
+export function cursorPoints(state, g) {
+  const L = layout(g.w, g.h);
+  const pts = [];
+  for (let i = 0; i < HOLES.length; i++) {
+    const p = holePos(i, L);
+    pts.push({ x: p.x, y: p.y, r: L.unit * 0.5 });
+  }
+  return pts;
+}

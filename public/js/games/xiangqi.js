@@ -786,3 +786,13 @@ export function draw(ctx, state, g) {
     halo(ctx, cx, cy, r * 1.16, 'rgba(255,80,60,0.95)', Math.max(2, step * 0.07));
   }
 }
+
+/** 遥控器 / 键盘光标可停靠的点位（画布像素坐标） */
+export function cursorPoints(state, g) {
+  const L = layout(g.w, g.h);
+  const pts = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) pts.push({ x: L.x0 + x * L.step, y: L.y0 + y * L.step, r: L.step * 0.46 });
+  }
+  return pts;
+}

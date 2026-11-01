@@ -54,6 +54,28 @@ docker run -d -p 8030:8030 --name qige-chess --restart unless-stopped qige-chess
 
 端口可用环境变量 `PORT` 调整（compose 中改 `ports` 与 `PORT` 保持一致即可）。
 
+## 电视 / 投影 / 遥控器
+
+APK 已适配电视和投影（出现在电视主屏，无触屏也能装）：
+
+- **方向键**：移动焦点；进入棋盘后是一个发光光标，在棋盘点位之间移动，走到边缘会自动跳到旁边的按钮
+- **确定键**：点击按钮 / 在光标处选子、落子
+- **返回键**：关弹窗 → 退回首页 → 退出应用
+- 键盘也一样可用（方向键 / Enter / Esc）；触屏、鼠标操作不受影响
+
+## 离线 APK 与在线更新
+
+每次推送到 `main`，GitHub Actions 会自动编译签名 APK 并发布到 Releases，版本号 = `主.次`（`package.json`）+ 构建号，首页底部可看到。同一签名，直接覆盖安装升级。
+
+应用内「检查更新」（启动 4 秒后也会静默检查一次）：
+
+1. 先试「更新服务器」——就是你用 docker 部署的这个站点，本服务器会代你去 GitHub 取最新 APK（`/api/update`、`/api/update/apk`），国内访问更稳
+2. 连不上再直连 GitHub Releases
+
+在应用里「检查更新 → 更新服务器」填入你的站点地址（如 `https://chess.example.com`）即可；也可以在仓库的 Settings → Variables 里新建 `UPDATE_SERVER`，之后编译出的 APK 默认就带上。服务器可用环境变量 `GITHUB_REPO` 指向别的仓库，`GITHUB_TOKEN` 提高 GitHub 接口额度。
+
+首次更新时安卓会要求允许本应用「安装未知应用」，允许后回来再点一次「立即更新」。
+
 ## 安装成 App（推荐在平板上用）
 
 PWA 需要 HTTPS 或 localhost 才能安装。几种常见做法：
@@ -70,13 +92,14 @@ PWA 需要 HTTPS 或 localhost 才能安装。几种常见做法：
 
 ```
 chess/
-├─ server/index.js        零依赖静态服务（SPA 回退、ETag）
+├─ server/index.js        零依赖静态服务（SPA 回退、ETag、gzip、更新代理）
 ├─ public/
 │  ├─ index.html
 │  ├─ manifest.webmanifest / sw.js / icons/
 │  ├─ css/app.css
 │  └─ js/
 │     ├─ core/            app.js（界面）· session.js（对局/AI/存档）· ai-worker.js
+│     │                    nav.js（遥控器导航）· updater.js（在线更新）· version.js
 │     └─ games/           _util.js · _draw.js · 七种棋的实现 + index.js
 ├─ tools/                 selftest.mjs（自测）· make-icons.mjs（生成 PWA 图标）
 ├─ Dockerfile / docker-compose.yml
@@ -96,6 +119,7 @@ aiMove(state)      // 同步 AI（在 Worker 中运行）
 undo(state)        // 悔棋
 draw(ctx, state, {w,h}) // 绘制
 actions(state) / action(state, id)  // 额外按钮（掷骰子、停一手、重新布阵…）
+cursorPoints(state, {w,h}) // 遥控器光标可停靠的点位 [{x,y,r}]
 ```
 
 ## 已知限制

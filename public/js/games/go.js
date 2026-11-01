@@ -590,3 +590,13 @@ export function draw(ctx, state, g) {
     boardLabel(ctx, `${seatName(state)}行棋`, L.x0 + end / 2, L.y0 - step * 0.55, Math.max(10, step * 0.34), 'rgba(60,36,12,0.6)');
   }
 }
+
+/** 遥控器 / 键盘光标可停靠的点位（画布像素坐标） */
+export function cursorPoints(state, g) {
+  const L = layout(g.w, g.h);
+  const pts = [];
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) pts.push({ x: L.x0 + x * L.step, y: L.y0 + y * L.step, r: L.step * 0.46 });
+  }
+  return pts;
+}

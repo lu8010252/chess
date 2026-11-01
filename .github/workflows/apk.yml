@@ -30,17 +30,25 @@ jobs:
 
       - name: 计算版本号（主.次 取自 package.json，构建号 = 运行序号）
         id: ver
+        env:
+          UPDATE_SERVER: ${{ vars.UPDATE_SERVER }}
         run: |
           BASE=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
           VERSION="${BASE}.${GITHUB_RUN_NUMBER}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-          echo "export const VERSION = '${VERSION}';" > public/js/core/version.js
+          node -e "
+            const v = process.argv[1], s = process.env.UPDATE_SERVER || '';
+            require('fs').writeFileSync('public/js/core/version.js',
+              'export const VERSION = ' + JSON.stringify(v) + ';\n' +
+              'export const UPDATE_SERVER = ' + JSON.stringify(s) + ';\n' +
+              'export const REPO = ' + JSON.stringify(process.env.GITHUB_REPOSITORY) + ';\n');
+          " "${VERSION}"
           echo "版本：${VERSION}"
 
       - name: 安装 Capacitor 并生成 Android 工程
         run: |
-          npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/app
           npx cap add android
           npx cap sync android
           pip install --quiet pillow

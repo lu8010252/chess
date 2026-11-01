@@ -1,5 +1,5 @@
 // 离线缓存：安装后可断网使用
-const VERSION = 'qige-v4';
+const VERSION = 'qige-v5';
 const CACHE = `${VERSION}-static`;
 
 const ASSETS = [
@@ -10,6 +10,8 @@ const ASSETS = [
   '/js/core/app.js',
   '/js/core/session.js',
   '/js/core/version.js',
+  '/js/core/nav.js',
+  '/js/core/updater.js',
   '/js/core/ai-worker.js',
   '/js/games/index.js',
   '/js/games/_util.js',
