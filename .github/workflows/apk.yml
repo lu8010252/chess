@@ -1,0 +1,73 @@
+name: 构建 APK
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['README.md', 'Dockerfile', 'docker-compose.yml', '.dockerignore']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: 计算版本号（主.次 取自 package.json，构建号 = 运行序号）
+        id: ver
+        run: |
+          BASE=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          VERSION="${BASE}.${GITHUB_RUN_NUMBER}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "export const VERSION = '${VERSION}';" > public/js/core/version.js
+          echo "版本：${VERSION}"
+
+      - name: 安装 Capacitor 并生成 Android 工程
+        run: |
+          npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
+          npx cap add android
+          npx cap sync android
+          pip install --quiet pillow
+          node tools/android-patch.mjs "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.code }}"
+
+      - name: 编译签名 APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: 重命名 APK
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "qige-chess-v${{ steps.ver.outputs.version }}.apk"
+          ls -la *.apk
+
+      - name: 发布到 Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.ver.outputs.version }}"
+          {
+            echo "## 棋阁 ${TAG}"
+            echo
+            echo "- 版本号：**${{ steps.ver.outputs.version }}**（应用首页底部可看到同样的版本号）"
+            echo "- 完全离线，装好后不需要网络和服务器；同一签名，可直接覆盖安装升级"
+            echo
+            echo "### 本次更新"
+            git log -1 --pretty=%B | sed 's/^/> /'
+          } > notes.md
+          gh release create "${TAG}" "qige-chess-v${{ steps.ver.outputs.version }}.apk" \
+            --title "棋阁 ${TAG}" --notes-file notes.md --target "${GITHUB_SHA}"

@@ -1,6 +1,6 @@
 // 中国象棋：九路十行，红先黑后，将死或困毙判负
 import { pushHistory, popHistory, finish, makeSeats } from './_util.js';
-import { boardSurface, PALETTE, pieceText, halo, roundRect } from './_draw.js';
+import { boardSurface, PALETTE, discPiece, halo, roundRect } from './_draw.js';
 
 const W = 9;
 const H = 10;
@@ -440,8 +440,9 @@ export function applyMove(state, move) {
 /* ---------------- 交互 ---------------- */
 
 function layout(w, h) {
-  const pad = Math.min(w, h) * 0.03;
-  const step = Math.min((w - pad * 2) / (W - 1), (h - pad * 2) / (H - 1));
+  // 四周各留 0.7 格：边线上的棋子（半径约 0.44 格）和选中光圈不会被画布裁掉
+  const m = 0.7;
+  const step = Math.min(w / (W - 1 + m * 2), h / (H - 1 + m * 2));
   return {
     step,
     x0: (w - step * (W - 1)) / 2,
@@ -737,25 +738,7 @@ export function draw(ctx, state, g) {
       const cx = L.x0 + x * step;
       const cy = L.y0 + y * step;
       const red = v > 0;
-      const grad = ctx.createRadialGradient(cx - r * 0.32, cy - r * 0.36, r * 0.15, cx, cy, r);
-      grad.addColorStop(0, '#fff9ec');
-      grad.addColorStop(0.72, '#f2dfba');
-      grad.addColorStop(1, '#dcbf90');
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-      ctx.lineWidth = Math.max(1.6, step * 0.055);
-      ctx.strokeStyle = red ? '#b33526' : '#23262d';
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
-      ctx.lineWidth = Math.max(1, step * 0.02);
-      ctx.strokeStyle = red ? 'rgba(179,53,38,0.55)' : 'rgba(35,38,45,0.55)';
-      ctx.stroke();
-
-      pieceText(ctx, pieceName(v), cx, cy, r * 1.55, r * 1.12, red ? '#8e2417' : '#15181d', 800);
+      discPiece(ctx, cx, cy, r, red ? 'red' : 'black', pieceName(v), r * 1.12);
     }
   }
 

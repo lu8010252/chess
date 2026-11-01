@@ -1,6 +1,7 @@
 // 界面主逻辑：首页 / 对局页 / 弹层 / 棋盘自适应 / PWA
 import { Session } from './session.js';
 import { GAMES, getGame } from '../games/index.js';
+import { VERSION } from './version.js';
 
 const LEVELS = [
   { v: 1, label: '简单', desc: '轻松上手' },
@@ -51,7 +52,8 @@ function mount() {
       <div class="grid" id="grid"></div>
       <footer class="home-foot">
         五子棋 · 象棋 · 军棋 · 国际象棋 · 围棋 · 跳棋 · 飞行棋<br />
-        支持离线使用，可安装到平板上运行
+        支持离线使用，可安装到平板上运行<br />
+        <span class="ver">版本 v${VERSION}</span>
       </footer>
     </section>
 
@@ -217,8 +219,9 @@ function isStandalone() {
 function drawThumb(canvas, mod) {
   try {
     const aspect = mod.meta.aspect || 1;
-    const W = 480;
-    const H = Math.max(140, Math.round(W * aspect));
+    // aspect = 宽/高：竖版棋盘（军棋 0.5）要把高度拉长，而不是压扁
+    const W = 420;
+    const H = Math.max(140, Math.round(W / aspect));
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
@@ -559,8 +562,17 @@ async function installApp() {
 
 mount();
 
+// APK（Capacitor）里资源本来就在本地，不用 Service Worker，
+// 还要清掉旧缓存，否则更新 APK 后会先看到旧界面
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
+  if (window.Capacitor) {
+    navigator.serviceWorker.getRegistrations()
+      .then(list => list.forEach(r => r.unregister()))
+      .catch(() => {});
+    if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+  } else {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
 }

@@ -1,6 +1,6 @@
 // 国际象棋：8×8，白先，含王车易位、吃过路兵、兵升变、将死/逼和/三次重复/50 回合
 import { pushHistory, popHistory, finish, makeSeats } from './_util.js';
-import { boardSurface, PALETTE, halo, roundRect } from './_draw.js';
+import { boardSurface, PALETTE, halo, roundRect, chessPiece } from './_draw.js';
 
 const W = 8;
 const KEYS = ['board', 'castling', 'ep', 'halfmove', 'turn', 'lastMove', 'ply', 'over', 'result', 'note', 'reps'];
@@ -726,7 +726,11 @@ export function draw(ctx, state, g) {
     for (let x = 0; x < W; x++) {
       const px = L.x0 + x * cell;
       const py = L.y0 + y * cell;
-      ctx.fillStyle = (x + y) % 2 === 0 ? '#efd9b4' : '#a9743f';
+      const light = (x + y) % 2 === 0;
+      const sg = ctx.createLinearGradient(px, py, px + cell, py + cell);
+      sg.addColorStop(0, light ? '#f6e4c1' : '#b5814a');
+      sg.addColorStop(1, light ? '#e6cd9f' : '#9a6a38');
+      ctx.fillStyle = sg;
       ctx.fillRect(px, py, cell, cell);
     }
   }
@@ -758,49 +762,27 @@ export function draw(ctx, state, g) {
     }
   }
 
-  // 棋子
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  // 棋子（矢量绘制，不依赖系统字体）
   for (let y = 0; y < W; y++) {
     for (let x = 0; x < W; x++) {
       const v = state.board[idx(x, y)];
       if (!v) continue;
-      const px = L.x0 + (x + 0.5) * cell;
-      const py = L.y0 + (y + 0.5) * cell;
-      const glyph = GLYPHS[v > 0 ? 'white' : 'black'][Math.abs(v)];
-      const size = cell * 0.82;
-      ctx.font = `${size}px "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "DejaVu Sans", serif`;
-
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.35)';
-      ctx.shadowBlur = cell * 0.08;
-      ctx.shadowOffsetY = cell * 0.04;
-      if (v > 0) {
-        ctx.strokeStyle = 'rgba(42,30,16,0.9)';
-        ctx.lineWidth = Math.max(1.6, cell * 0.055);
-        ctx.strokeText(glyph, px, py + cell * 0.02);
-        ctx.fillStyle = '#fbf7ee';
-        ctx.fillText(glyph, px, py + cell * 0.02);
-      } else {
-        ctx.strokeStyle = 'rgba(235,225,200,0.55)';
-        ctx.lineWidth = Math.max(1.2, cell * 0.04);
-        ctx.strokeText(glyph, px, py + cell * 0.02);
-        ctx.fillStyle = '#15171c';
-        ctx.fillText(glyph, px, py + cell * 0.02);
-      }
-      ctx.restore();
+      chessPiece(ctx, Math.abs(v), L.x0 + (x + 0.5) * cell, L.y0 + (y + 0.5) * cell, cell * 0.92, v > 0);
     }
   }
-  ctx.restore();
 
   // 选中
   if (state.selected) {
     const cx = L.x0 + (state.selected.x + 0.5) * cell;
     const cy = L.y0 + (state.selected.y + 0.5) * cell;
-    ctx.strokeStyle = 'rgba(255,205,90,0.95)';
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,205,90,0.98)';
+    ctx.shadowColor = 'rgba(255,205,90,0.9)';
+    ctx.shadowBlur = cell * 0.2;
     ctx.lineWidth = Math.max(2, cell * 0.07);
-    ctx.strokeRect(L.x0 + state.selected.x * cell + cell * 0.05, L.y0 + state.selected.y * cell + cell * 0.05, cell * 0.9, cell * 0.9);
+    roundRect(ctx, L.x0 + state.selected.x * cell + cell * 0.05, L.y0 + state.selected.y * cell + cell * 0.05, cell * 0.9, cell * 0.9, cell * 0.12);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // 被将军的王

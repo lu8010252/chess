@@ -5,3 +5,4 @@ node_modules
 tools
 README.md
 *.log
+android-signing

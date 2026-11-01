@@ -181,11 +181,12 @@ button {
 }
 
 .thumb canvas {
+  position: absolute;
+  inset: 6px;
   display: block;
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  object-fit: contain; /* 竖版棋盘（军棋）完整显示，不被裁掉 */
   border-radius: 10px;
 }
 
@@ -456,7 +457,7 @@ button {
 }
 
 .sheet-head .mini { display: grid; place-items: center; }
-.sheet-head .mini canvas { max-width: 100%; max-height: 100%; display: block; }
+.sheet-head .mini canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 .sheet-head h2 {
   margin: 0;
@@ -728,4 +729,14 @@ body.immersive .stage { padding: max(8px, var(--safe-t)) max(8px, var(--safe-r))
     animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.home-foot .ver {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--dim);
 }
