@@ -5,7 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(fileURLToPath(new URL('../public', import.meta.url)));
-const PORT = Number(process.env.PORT || 8787);
+const PORT = Number(process.env.PORT || 8030);
 const HOST = process.env.HOST || '0.0.0.0';
 
 const MIME = {

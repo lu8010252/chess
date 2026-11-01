@@ -27,7 +27,7 @@
 
 ```bash
 npm start
-# 打开 http://localhost:8787
+# 打开 http://localhost:8030
 ```
 
 修改前端文件后刷新即可，无需构建。
@@ -42,14 +42,14 @@ npm test
 
 ```bash
 docker compose up -d --build
-# 打开 http://localhost:8787
+# 打开 http://localhost:8030
 ```
 
 或不用 compose：
 
 ```bash
 docker build -t qige-chess .
-docker run -d -p 8787:8787 --name qige-chess --restart unless-stopped qige-chess
+docker run -d -p 8030:8030 --name qige-chess --restart unless-stopped qige-chess
 ```
 
 端口可用环境变量 `PORT` 调整（compose 中改 `ports` 与 `PORT` 保持一致即可）。
@@ -58,7 +58,7 @@ docker run -d -p 8787:8787 --name qige-chess --restart unless-stopped qige-chess
 
 PWA 需要 HTTPS 或 localhost 才能安装。几种常见做法：
 
-1. **本机局域网访问**：用 Nginx / Caddy 反向代理到 8787 并开启 HTTPS，平板用浏览器打开后点「安装到桌面」。
+1. **本机局域网访问**：用 Nginx / Caddy 反向代理到 8030 并开启 HTTPS，平板用浏览器打开后点「安装到桌面」。
 2. **Android 平板**：Chrome 菜单 →「安装应用」/「添加到主屏幕」；会以独立窗口、全屏运行。
 3. **iPad / iPhone**：Safari → 分享 →「添加到主屏幕」；以独立全屏窗口运行。
 4. **桌面 Chrome / Edge**：地址栏右侧的安装图标，或首页的「安装到桌面」按钮。
