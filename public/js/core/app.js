@@ -371,6 +371,7 @@ function enterTable() {
   }
   ui.home.hidden = true;
   ui.table.hidden = false;
+  try { if (!(history.state && history.state.qt)) history.pushState({ qt: 1 }, ''); } catch {}
   ui.canvas.style.width = '0px';
   ui.canvas.style.height = '0px';
   shownResult = '';
@@ -383,7 +384,18 @@ function enterTable() {
   });
 }
 
+// 系统/浏览器的返回（安卓返回键在 WebView 里常表现为 history.back）：先关弹层，再回首页
+window.addEventListener('popstate', () => {
+  if (overlay) {
+    closeOverlay();
+    try { if (ui.table && !ui.table.hidden) history.pushState({ qt: 1 }, ''); } catch {}
+    return;
+  }
+  if (ui.table && !ui.table.hidden) goHome();
+});
+
 function goHome() {
+  try { if (history.state && history.state.qt) history.back(); } catch {}
   ui.table.hidden = true;
   ui.home.hidden = false;
   ui.home.style.display = '';
