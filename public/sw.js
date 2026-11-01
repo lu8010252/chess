@@ -1,5 +1,5 @@
 // 离线缓存：安装后可断网使用
-const VERSION = 'qige-v7';
+const VERSION = 'qige-v8';
 const CACHE = `${VERSION}-static`;
 
 const ASSETS = [

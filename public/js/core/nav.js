@@ -11,6 +11,19 @@ const DIRS = {
 // 进入对局时光标的起始位置（占棋盘宽高的比例）；没列出的棋种从正中开始
 const START_FRAC = { chess: 0.78, xiangqi: 0.78, junqi: 0.78, checkers: 0.82 };
 
+export function exitApp() {
+  try {
+    const u = window.Capacitor && window.Capacitor.registerPlugin('ApkUpdater');
+    if (u && u.exit) {
+      u.exit();
+      return;
+    }
+  } catch {}
+  try {
+    window.Capacitor.registerPlugin('App').exitApp();
+  } catch {}
+}
+
 export function initNav(api) {
   const { session, ui } = api;
   let cur = null; // 棋盘光标：{fx, fy}，占画布宽高的比例，缩放/旋转后位置不变
@@ -192,19 +205,8 @@ export function initNav(api) {
   /* ---------- 返回键 ---------- */
 
   function goBack(fromNative) {
-    if (api.isOverlayOpen()) {
-      api.closeOverlay();
-      return;
-    }
-    if (api.isTable()) {
-      api.goHome();
-      return;
-    }
-    if (fromNative && window.Capacitor) {
-      try {
-        window.Capacitor.registerPlugin('App').exitApp();
-      } catch {}
-    }
+    if (window.__qigeBack && window.__qigeBack()) return;
+    if (fromNative) exitApp();
   }
 
   /* ---------- 事件 ---------- */

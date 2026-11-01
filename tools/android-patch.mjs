@@ -236,6 +236,12 @@ public class ApkUpdaterPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void exit(PluginCall call) {
+        call.resolve();
+        if (getActivity() != null) getActivity().finishAffinity();
+    }
+
+    @PluginMethod
     public void install(PluginCall call) {
         File f = apkFile();
         if (!f.exists()) {
@@ -264,6 +270,9 @@ writeFileSync(join(pkgDir, 'ApkUpdaterPlugin.java'), plugin);
 const mainActivity = `package com.lu8010252.qige;
 
 import android.os.Bundle;
+import android.webkit.WebView;
+
+import androidx.activity.OnBackPressedCallback;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -272,6 +281,20 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ApkUpdaterPlugin.class);
         super.onCreate(savedInstanceState);
+        // 自己接管返回键（手机返回键/手势、遥控器返回键）：交给网页处理，网页说「已在首页」才退出
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                final WebView wv = getBridge() != null ? getBridge().getWebView() : null;
+                if (wv == null) {
+                    finishAffinity();
+                    return;
+                }
+                wv.evaluateJavascript("(function(){try{return window.__qigeBack?window.__qigeBack():false}catch(e){return false}})()", value -> {
+                    if (!"true".equals(value)) finishAffinity();
+                });
+            }
+        });
     }
 }
 `;

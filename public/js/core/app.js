@@ -420,6 +420,23 @@ window.addEventListener('popstate', () => {
   syncHistory();
 });
 
+// 给原生返回键调用：返回 true 表示已处理（关弹层/退出全屏/回首页），false 表示已在首页，应退出应用
+window.__qigeBack = () => {
+  if (overlay) {
+    closeOverlay();
+    return true;
+  }
+  if (document.body.classList.contains('immersive')) {
+    exitImmersive();
+    return true;
+  }
+  if (ui.table && !ui.table.hidden) {
+    goHome();
+    return true;
+  }
+  return false;
+};
+
 function goHome() {
   ui.table.hidden = true;
   ui.home.hidden = false;
