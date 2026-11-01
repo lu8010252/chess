@@ -147,6 +147,45 @@ public class ApkUpdaterPlugin extends Plugin {
         throw new IOException("重定向次数过多");
     }
 
+    // 不走 api.github.com（国内常被限流/拦截）：直接访问 github.com/<repo>/releases/latest，从跳转地址里取版本号
+    @PluginMethod
+    public void latest(final PluginCall call) {
+        final String repo = call.getString("repo");
+        if (repo == null || repo.isEmpty()) {
+            call.reject("缺少仓库名");
+            return;
+        }
+        new Thread(() -> {
+            try {
+                String cur = "https://github.com/" + repo + "/releases/latest";
+                String tag = null;
+                for (int i = 0; i < 6 && tag == null; i++) {
+                    HttpURLConnection c = (HttpURLConnection) new URL(cur).openConnection();
+                    c.setInstanceFollowRedirects(false);
+                    c.setConnectTimeout(15000);
+                    c.setReadTimeout(20000);
+                    c.setRequestProperty("User-Agent", "qige-chess");
+                    int code = c.getResponseCode();
+                    String loc = c.getHeaderField("Location");
+                    c.disconnect();
+                    if (code >= 300 && code < 400 && loc != null) {
+                        cur = new URL(new URL(cur), loc).toString();
+                        int k = cur.indexOf("/releases/tag/");
+                        if (k >= 0) tag = cur.substring(k + 14);
+                    } else {
+                        throw new IOException("HTTP " + code);
+                    }
+                }
+                if (tag == null) throw new IOException("没找到最新版本");
+                JSObject o = new JSObject();
+                o.put("tag", tag);
+                call.resolve(o);
+            } catch (Exception e) {
+                call.reject("访问 GitHub 失败：" + e.getMessage());
+            }
+        }).start();
+    }
+
     @PluginMethod
     public void download(final PluginCall call) {
         final String url = call.getString("url");

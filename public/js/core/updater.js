@@ -72,7 +72,21 @@ async function fetchLatest() {
     if (!asset) throw new Error('发布里没有 APK');
     return { version: j.tag_name, notes: j.body || '', apkUrl: asset.browser_download_url, size: asset.size || 0, source: 'GitHub' };
   } catch (e) {
-    errors.push(`GitHub 连不上（${e.message || e}）`);
+    errors.push(`GitHub 接口不通（${e.message || e}）`);
+  }
+  // 备用：只访问 github.com 网页本身（能打开 GitHub 就能用），不依赖 api.github.com
+  try {
+    const { tag } = await window.Capacitor.registerPlugin('ApkUpdater').latest({ repo: REPO });
+    const v = String(tag).replace(/^v/, '');
+    return {
+      version: v,
+      notes: '',
+      apkUrl: `https://github.com/${REPO}/releases/download/v${v}/qige-chess-v${v}.apk`,
+      size: 0,
+      source: 'GitHub'
+    };
+  } catch (e) {
+    errors.push(`GitHub 网页也不通（${e.message || e}）`);
   }
   throw new Error(errors.join('；'));
 }
