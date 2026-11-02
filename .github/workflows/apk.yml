@@ -65,7 +65,20 @@ jobs:
 
       - name: 编译签名 APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon 2>&1 | tee build.log
+
+      - name: 编译失败时记录日志
+        if: failure()
+        run: |
+          tail -c 150000 android/build.log > build-error.txt || true
+          git config user.email "ci@qige.local"
+          git config user.name "qige-ci"
+          git checkout -B diag
+          git add -f build-error.txt
+          git commit -m "ci: 编译日志" || true
+          git push -f origin diag
 
       - name: 重命名 APK
         run: |
