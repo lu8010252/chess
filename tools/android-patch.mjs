@@ -25,11 +25,7 @@ const signing = `
         }
     }
 `;
-g = g.replace(/android\s*\{/, m => m + signing + `
-    lint {
-        disable 'HardcodedDebugMode'
-    }
-`);
+g = g.replace(/android\s*\{/, m => m + signing);
 g = g.replace(/buildTypes\s*\{\s*release\s*\{/, m => m + '\n            signingConfig signingConfigs.qige');
 writeFileSync(gradlePath, g);
 
@@ -68,7 +64,7 @@ mf = mf.replace(
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />`
 );
-mf = mf.replace('<application', '<application\n        android:name=".QigeApp"\n        android:debuggable="true"\n        android:usesCleartextTraffic="true"\n        android:banner="@drawable/tv_banner"');
+mf = mf.replace('<application', '<application\n        android:name=".QigeApp"\n        android:usesCleartextTraffic="true"\n        android:banner="@drawable/tv_banner"');
 // 同时出现在手机桌面和电视主屏
 mf = mf.replace(
   /(<category android:name="android\.intent\.category\.LAUNCHER"\s*\/>)/,
@@ -346,7 +342,6 @@ const appClass = `package com.lu8010252.qige;
 import android.app.ActivityManager;
 import android.app.Application;
 import android.content.Context;
-import android.os.Debug;
 import android.webkit.WebSettings;
 
 public class QigeApp extends Application {
@@ -375,21 +370,6 @@ public class QigeApp extends Application {
                 BootLog.write("getDefaultUserAgent failed: " + e);
             }
         }, "qige-ua").start();
-
-        Thread w = new Thread(() -> {
-            for (int i = 1; i <= 120; i++) {
-                try {
-                    Thread.sleep(i <= 12 ? 250 : 1000);
-                } catch (InterruptedException e) {
-                    return;
-                }
-                Runtime r = Runtime.getRuntime();
-                BootLog.writeRaw("heartbeat #" + i + " native=" + Debug.getNativeHeapAllocatedSize() / 1024
-                        + "K java=" + (r.totalMemory() - r.freeMemory()) / 1024 + "K threads=" + Thread.activeCount());
-            }
-        }, "qige-watchdog");
-        w.setDaemon(true);
-        w.start();
 
         super.onCreate();
         BootLog.write("Application.onCreate done");
@@ -500,28 +480,6 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         });
-
-        probe(400);
-        probe(900);
-        probe(1600);
-        probe(2600);
-    }
-
-    // 定时看看网页到底有没有跑起来
-    private void probe(final long delay) {
-        try {
-            final WebView wv = getBridge() != null ? getBridge().getWebView() : null;
-            if (wv == null) {
-                BootLog.write("probe@" + delay + " bridge=null");
-                return;
-            }
-            wv.postDelayed(() -> {
-                BootLog.write("probe@" + delay + " fired");
-                wv.evaluateJavascript("(function(){var g=document.getElementById('grid');return JSON.stringify({ready:document.readyState,grid:g?g.children.length:-1,canvas:document.querySelectorAll('canvas').length,body:document.body?document.body.getElementsByTagName('*').length:-1});})()", value -> BootLog.write("probe@" + delay + " js=" + value));
-            }, delay);
-        } catch (Throwable e) {
-            BootLog.write("probe@" + delay + " failed: " + e);
-        }
     }
 
     @Override
