@@ -64,7 +64,7 @@ mf = mf.replace(
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />`
 );
-mf = mf.replace('<application', '<application\n        android:usesCleartextTraffic="true"\n        android:banner="@drawable/tv_banner"');
+mf = mf.replace('<application', '<application\n        android:name=".QigeApp"\n        android:debuggable="true"\n        android:usesCleartextTraffic="true"\n        android:banner="@drawable/tv_banner"');
 // 同时出现在手机桌面和电视主屏
 mf = mf.replace(
   /(<category android:name="android\.intent\.category\.LAUNCHER"\s*\/>)/,
@@ -267,11 +267,139 @@ public class ApkUpdaterPlugin extends Plugin {
 `;
 writeFileSync(join(pkgDir, 'ApkUpdaterPlugin.java'), plugin);
 
+// ---------- 启动取证：把每个启动阶段写进 /sdcard/Android/data/<包名>/files/boot.log ----------
+const bootLog = `package com.lu8010252.qige;
+
+import android.content.Context;
+import android.util.Log;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
+final class BootLog {
+    private static File file;
+    private static final long T0 = System.currentTimeMillis();
+
+    private BootLog() {
+    }
+
+    static synchronized void init(Context ctx) {
+        if (file != null) return;
+        try {
+            File dir = ctx.getExternalFilesDir(null);
+            if (dir == null) dir = ctx.getFilesDir();
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+            file = new File(dir, "boot.log");
+        } catch (Throwable ignored) {
+            file = null;
+        }
+    }
+
+    static synchronized void write(String msg) {
+        writeRaw("[" + (System.currentTimeMillis() - T0) + "ms] " + msg);
+    }
+
+    static synchronized void writeRaw(String line) {
+        try {
+            Log.i("QIGE", line);
+        } catch (Throwable ignored) {
+        }
+        if (file == null) return;
+        FileOutputStream fo = null;
+        try {
+            fo = new FileOutputStream(file, true);
+            fo.write((line + "\\n").getBytes("UTF-8"));
+            fo.flush();
+        } catch (Throwable ignored) {
+        } finally {
+            if (fo != null) {
+                try {
+                    fo.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    static String trace(Throwable e) {
+        try {
+            StringWriter sw = new StringWriter();
+            e.printStackTrace(new PrintWriter(sw));
+            return sw.toString();
+        } catch (Throwable t) {
+            return String.valueOf(e);
+        }
+    }
+}
+`;
+writeFileSync(join(pkgDir, 'BootLog.java'), bootLog);
+
+const appClass = `package com.lu8010252.qige;
+
+import android.app.ActivityManager;
+import android.app.Application;
+import android.content.Context;
+import android.os.Debug;
+import android.webkit.WebView;
+
+public class QigeApp extends Application {
+    @Override
+    public void onCreate() {
+        BootLog.init(this);
+        BootLog.write("Application.onCreate start");
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            BootLog.write("memoryClass=" + am.getMemoryClass() + "K large=" + am.getLargeMemoryClass()
+                    + "K lowRam=" + am.isLowRamDevice() + " maxHeap=" + Runtime.getRuntime().maxMemory() / 1024 + "K");
+        } catch (Throwable e) {
+            BootLog.write("memory info failed: " + e);
+        }
+
+        final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            BootLog.writeRaw("FATAL uncaught in thread " + t.getName() + "\\n" + BootLog.trace(e));
+            if (prev != null) prev.uncaughtException(t, e);
+        });
+
+        new Thread(() -> {
+            try {
+                BootLog.write("ua=" + WebView.getDefaultUserAgent(QigeApp.this));
+            } catch (Throwable e) {
+                BootLog.write("getDefaultUserAgent failed: " + e);
+            }
+        }, "qige-ua").start();
+
+        Thread w = new Thread(() -> {
+            for (int i = 1; i <= 120; i++) {
+                try {
+                    Thread.sleep(i <= 12 ? 250 : 1000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                Runtime r = Runtime.getRuntime();
+                BootLog.writeRaw("heartbeat #" + i + " native=" + Debug.getNativeHeapAllocatedSize() / 1024
+                        + "K java=" + (r.totalMemory() - r.freeMemory()) / 1024 + "K threads=" + Thread.activeCount());
+            }
+        }, "qige-watchdog");
+        w.setDaemon(true);
+        w.start();
+
+        super.onCreate();
+        BootLog.write("Application.onCreate done");
+    }
+}
+`;
+writeFileSync(join(pkgDir, 'QigeApp.java'), appClass);
+
 const mainActivity = `package com.lu8010252.qige;
 
 import android.app.AlertDialog;
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.KeyEvent;
 import android.webkit.WebView;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -308,10 +436,13 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        BootLog.init(this);
+        BootLog.write("MainActivity.onCreate start");
         // 闪退诊断：把未捕获异常写到文件，下次打开时弹窗显示原因
         final File crashFile = new File(getFilesDir(), CRASH_FILE);
         final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            BootLog.writeRaw("FATAL uncaught in thread " + t.getName() + "\\n" + trace(e));
             try (FileOutputStream fo = new FileOutputStream(crashFile)) {
                 fo.write(trace(e).getBytes(StandardCharsets.UTF_8));
             } catch (Throwable ignored) {
@@ -330,8 +461,11 @@ public class MainActivity extends BridgeActivity {
 
         try {
             registerPlugin(ApkUpdaterPlugin.class);
+            BootLog.write("registerPlugin done");
             super.onCreate(savedInstanceState);
+            BootLog.write("super.onCreate done bridge=" + (getBridge() != null));
         } catch (Throwable e) {
+            BootLog.writeRaw("FATAL onCreate\\n" + trace(e));
             // 启动阶段出错（例如系统 WebView 缺失/太旧）：不闪退，直接把原因显示在屏幕上
             if (savedInstanceState == null) savedInstanceState = new Bundle();
             TextView tv = new TextView(this);
@@ -343,7 +477,10 @@ public class MainActivity extends BridgeActivity {
             setContentView(sv);
             return;
         }
-        if (lastCrash != null) showText("上次闪退原因", lastCrash);
+        if (lastCrash != null) {
+            BootLog.writeRaw("lastCrash\\n" + lastCrash);
+            showText("上次闪退原因", lastCrash);
+        }
 
         // 自己接管返回键（手机返回键/手势、遥控器返回键）：交给网页处理，网页说「已在首页」才退出
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -359,6 +496,76 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         });
+
+        probe(400);
+        probe(900);
+        probe(1600);
+        probe(2600);
+    }
+
+    // 定时看看网页到底有没有跑起来
+    private void probe(final long delay) {
+        try {
+            final WebView wv = getBridge() != null ? getBridge().getWebView() : null;
+            if (wv == null) {
+                BootLog.write("probe@" + delay + " bridge=null");
+                return;
+            }
+            wv.postDelayed(() -> {
+                BootLog.write("probe@" + delay + " fired");
+                wv.evaluateJavascript("(function(){var g=document.getElementById('grid');return JSON.stringify({ready:document.readyState,grid:g?g.children.length:-1,canvas:document.querySelectorAll('canvas').length,body:document.body?document.body.getElementsByTagName('*').length:-1});})()", value -> BootLog.write("probe@" + delay + " js=" + value));
+            }, delay);
+        } catch (Throwable e) {
+            BootLog.write("probe@" + delay + " failed: " + e);
+        }
+    }
+
+    @Override
+    protected void onStart() {
+        BootLog.write("onStart");
+        super.onStart();
+    }
+
+    @Override
+    protected void onResume() {
+        BootLog.write("onResume");
+        super.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        BootLog.write("onPause");
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        BootLog.write("onStop");
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        BootLog.write("onDestroy");
+        super.onDestroy();
+    }
+
+    @Override
+    public void onLowMemory() {
+        BootLog.write("onLowMemory");
+        super.onLowMemory();
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        BootLog.write("onTrimMemory " + level);
+        super.onTrimMemory(level);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        BootLog.write("onKeyDown " + keyCode);
+        return super.onKeyDown(keyCode, event);
     }
 }
 `;
