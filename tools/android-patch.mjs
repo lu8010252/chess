@@ -364,4 +364,19 @@ public class MainActivity extends BridgeActivity {
 `;
 writeFileSync(join(pkgDir, 'MainActivity.java'), mainActivity);
 
+// 老设备（安卓 8 投影等）兼容：APK 不加载 ES Module，改加载降级打包好的单个经典脚本，
+// 并先插入启动诊断脚本（界面起不来时把 WebView 版本和错误显示在屏幕上）。
+const assetsIndex = join(app, 'src/main/assets/public/index.html');
+const bundlePath = join(app, 'src/main/assets/public/js/app-bundle.js');
+if (!existsSync(bundlePath)) throw new Error('缺少 assets/public/js/app-bundle.js：请先运行 esbuild 打包再 cap sync');
+let idx = readFileSync(assetsIndex, 'utf8');
+const classicTags = `
+    <script>window.__QIGE_CLASSIC__ = true;</script>
+    <script src="/js/core/guard.js"></script>
+    <script src="/js/app-bundle.js"></script>`;
+const moduleTag = /<script\s+type="module"\s+src="\/js\/core\/app\.js"><\/script>/;
+if (moduleTag.test(idx)) idx = idx.replace(moduleTag, classicTags);
+else idx = idx.replace('</body>', `${classicTags}\n</body>`);
+writeFileSync(assetsIndex, idx);
+
 console.log(`已定制 Android 工程：v${versionName} (${versionCode})，res: ${readdirSync(join(app, 'src/main/res')).join(', ')}`);

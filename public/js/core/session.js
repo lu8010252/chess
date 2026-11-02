@@ -211,7 +211,10 @@ export class Session {
 
   spawnWorker() {
     try {
-      const worker = new Worker(new URL('./ai-worker.js', import.meta.url), { type: 'module' });
+      // APK 里 index.html 会设置 __QIGE_CLASSIC__，改用降级打包好的经典 Worker（旧 WebView 也能跑）
+      const classic = !!window.__QIGE_CLASSIC__;
+      const url = new URL(classic ? 'js/ai-worker-bundle.js' : 'js/core/ai-worker.js', window.location.href).toString();
+      const worker = classic ? new Worker(url) : new Worker(url, { type: 'module' });
       worker.onmessage = ev => {
         const d = ev.data || {};
         const p = this.pending.get(d.id);

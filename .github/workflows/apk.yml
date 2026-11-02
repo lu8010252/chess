@@ -53,8 +53,12 @@ jobs:
 
       - name: 安装 Capacitor 并生成 Android 工程
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/app
+          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/app esbuild
           npx cap add android
+          # 安卓 8 / 投影等老 WebView 不支持 ES Module 和可选链等新语法，
+          # 这里把前端合并并降级成单个经典脚本（APK 只加载它们）
+          npx esbuild public/js/core/app.js --bundle --format=iife --target=chrome58 --outfile=public/js/app-bundle.js
+          npx esbuild public/js/core/ai-worker.js --bundle --format=iife --target=chrome58 --outfile=public/js/ai-worker-bundle.js
           npx cap sync android
           pip install --quiet pillow
           node tools/android-patch.mjs "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.code }}"

@@ -1,4 +1,5 @@
 // 界面主逻辑：首页 / 对局页 / 弹层 / 棋盘自适应 / PWA
+import './polyfills.js';
 import { Session } from './session.js';
 import { GAMES, getGame } from '../games/index.js';
 import { VERSION } from './version.js';
