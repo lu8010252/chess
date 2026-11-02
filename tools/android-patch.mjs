@@ -25,7 +25,11 @@ const signing = `
         }
     }
 `;
-g = g.replace(/android\s*\{/, m => m + signing);
+g = g.replace(/android\s*\{/, m => m + signing + `
+    lint {
+        disable 'HardcodedDebugMode'
+    }
+`);
 g = g.replace(/buildTypes\s*\{\s*release\s*\{/, m => m + '\n            signingConfig signingConfigs.qige');
 writeFileSync(gradlePath, g);
 
