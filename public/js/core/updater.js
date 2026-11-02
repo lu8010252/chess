@@ -105,6 +105,11 @@ function fmtMB(n) {
   return n ? `${(n / 1048576).toFixed(1)} MB` : '';
 }
 
+/** HTML 属性转义（更新服务器地址是用户输入的，不能直接拼进模板） */
+function escAttr(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 /** 下载并安装；onProgress(已下载字节, 总字节) */
 async function downloadAndInstall(info, onProgress) {
   const plugin = window.Capacitor.registerPlugin('ApkUpdater');
@@ -141,8 +146,8 @@ export function initUpdater(api) {
         <button class="secondary" data-recheck>重新检查</button>
         <details class="up-adv">
           <summary>更新服务器（可选）</summary>
-          <p>国内访问 GitHub 慢或连不上时，填你自己部署的棋阁地址（和网页版同一个），例如 https://chess.example.com</p>
-          <input data-server type="url" placeholder="https://" value="${getServer().replace(/"/g, '&quot;')}" />
+          <p>国内访问 GitHub 慢或连不上时，填你自己部署的棋阁地址（和网页版同一个），例如 https://chess.example.com。建议使用 https；http 明文地址有被劫持、替换安装包的风险。</p>
+          <input data-server type="url" placeholder="https://" value="${escAttr(getServer())}" />
           <button class="secondary" data-save>保存并重新检查</button>
         </details>
         <button class="secondary" data-close>${auto ? '以后再说' : '关闭'}</button>
@@ -236,10 +241,15 @@ export function initUpdater(api) {
     if (!native()) return;
     setTimeout(async () => {
       try {
+        // 正在对局或有弹层时先不打扰，玩家可以回首页后手动检查
+        if (api.canPrompt && !api.canPrompt()) return;
         const latest = await fetchLatest();
         let skipped = '';
         try { skipped = localStorage.getItem(SKIP_KEY) || ''; } catch {}
-        if (isNewer(latest.version, VERSION) && latest.version !== skipped) open(true, latest);
+        if (isNewer(latest.version, VERSION) && latest.version !== skipped) {
+          if (api.canPrompt && !api.canPrompt()) return;
+          open(true, latest);
+        }
       } catch {}
     }, 4000);
   }

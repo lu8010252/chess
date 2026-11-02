@@ -1,6 +1,6 @@
 {
   "name": "qige-chess",
-  "version": "1.1.0",
+  "version": "1.1.8",
   "private": true,
   "type": "module",
   "description": "棋阁 · 七种棋类（五子棋 / 象棋 / 军棋 / 国际象棋 / 围棋 / 跳棋 / 飞行棋），平板优先，双人与人机对战",

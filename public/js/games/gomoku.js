@@ -28,7 +28,7 @@ export const meta = {
     { h: '胜负判定', p: '横、竖、斜任意方向连续五颗同色棋子即为「五连」。五颗以上连续同样算胜。' },
     { h: '先手优势', p: '黑方先行，天然带有先手优势。本作不设禁手规则，双方规则完全对等，适合休闲对弈与新手练习。' },
     { h: '和棋', p: '当 225 个交叉点全部下满仍无人连成五子，判为和棋。' },
-    { h: '【连五吃子】玩法', p: `开局选「连五吃子」。双方各有 ${HAND} 枚棋子，轮流从手里落子。谁连成五子，不算赢：先从棋盘上吃掉对方任意 1 枚棋子（被吃的子永久出局），然后连成五子的这几枚收回自己手里，可以继续用。` },
+    { h: '【连五吃子】玩法', p: `开局选「连五吃子」。双方各有 ${HAND} 枚棋子，轮流从手里落子。谁连成五子，不算赢：先从棋盘上吃掉对方任意 1 枚棋子（被吃的子永久出局），然后连成的这条线（五枚或更长）全部收回自己手里，可以继续用。` },
     { h: '【连五吃子】怎么分胜负', p: '轮到你时手里已经没有棋子，你就输了；对方连成五子的次数越多，你的子就越少。双方同时用完时，比盘上最长的一条连线，长的赢，一样长才和棋；若一方的棋子（手里 + 棋盘上）全被吃光，也判负。' },
     { h: '常用战术', p: '「活三」指两端都空的三连，对手必须应对；「冲四」指一端被封的四连，只能堵不能挡。同时制造两个威胁（双三、四三）往往能直接取胜。' }
   ],
@@ -415,10 +415,12 @@ export function aiMove(state) {
   }
 
   // 困难：两层搜索，考虑对手最佳应手
-  const top = scored.slice(0, Math.min(7, scored.length));
-  let best = top[0], bestVal = -Infinity;
-  const clock = makeClock(1200);
+  const top = scored.slice(0, Math.min(8, scored.length));
+  const clock = makeClock(900);
+  const ranked = [];
   for (const s of top) {
+    // 能做出活四（两端都空）就是必胜手，直接下
+    if (s.atk >= 6e6) return { x: s.x, y: s.y };
     board[s.y * N + s.x] = me;
     let reply = 0;
     if (!clock()) {
@@ -430,10 +432,13 @@ export function aiMove(state) {
       }
     }
     board[s.y * N + s.x] = 0;
-    const val = s.atk * 1.1 + s.def * 1.0 - reply * 0.75;
-    if (val > bestVal) { bestVal = val; best = s; }
+    // 对手还手的威胁只做温和扣分（封顶），否则「困难」会一味防守，拖到满盘和棋
+    const val = s.atk * 1.18 + s.def * 1.0 - Math.min(reply, 1.2e6) * 0.15;
+    ranked.push({ x: s.x, y: s.y, val });
   }
-  return { x: best.x, y: best.y };
+  ranked.sort((a, b) => b.val - a.val);
+  // 在最优的几手里随机，避免双方都只走「最防守」的一手，最后满盘和棋
+  return pick(ranked.slice(0, Math.min(3, ranked.length)));
 }
 
 function pick(arr) {

@@ -8,9 +8,9 @@
 ## 特性
 
 - **7 种棋**，每种都有完整规则与三档 AI（简单 / 普通 / 困难）
-  - 五子棋（15×15，无禁手）
+  - 五子棋（15×15，无禁手；另有「连五吃子」玩法：每方 24 子，连五吃对方一子）
   - 象棋（九路十行，含马腿/象眼/将帅照面/将死判负）
-  - 军棋（二人陆战棋，暗棋布阵、铁路滑行、工兵拐弯、炸弹同归于尽、夺旗获胜）
+  - 军棋（二人陆战棋，暗棋布阵、铁路滑行、工兵拐弯、炸弹同归于尽、夺旗获胜；另有「明棋」玩法）
   - 国际象棋（王车易位、吃过路兵、升变、逼和、50 回合、三次重复、子力不足和棋）
   - 围棋（9 路，数子法计分、贴目 6.5、提子、禁自杀、打劫限制）
   - 跳棋（六角星 121 孔，连跳可换向，先进对家营地者胜）
@@ -67,7 +67,7 @@ APK 已适配电视和投影（出现在电视主屏，无触屏也能装）：
 
 每次推送到 `main`，GitHub Actions 会自动编译签名 APK 并发布到 Releases，版本号 = `主.次`（`package.json`）+ 构建号，首页底部可看到。同一签名，直接覆盖安装升级。
 
-应用内「检查更新」（启动 4 秒后也会静默检查一次）：
+应用内「检查更新」（启动 4 秒后会在首页静默检查一次，对局中不会弹窗打扰）：
 
 1. 先试「更新服务器」——就是你用 docker 部署的这个站点，本服务器会代你去 GitHub 取最新 APK（`/api/update`、`/api/update/apk`），国内访问更稳
 2. 连不上再直连 GitHub Releases
@@ -112,7 +112,7 @@ chess/
 
 ```js
 meta               // id/name/aspect/seatNames/rules/tips...
-create(opts)       // 新对局
+create(opts)       // 新对局（opts.variant 选择玩法）
 tap(state, {x,y,w,h})   // 点击棋盘（返回 {ok, moved, msg}）
 applyMove(state, move)  // 执行一步
 aiMove(state)      // 同步 AI（在 Worker 中运行）
@@ -120,6 +120,8 @@ undo(state)        // 悔棋
 draw(ctx, state, {w,h}) // 绘制
 actions(state) / action(state, id)  // 额外按钮（掷骰子、停一手、重新布阵…）
 cursorPoints(state, {w,h}) // 遥控器光标可停靠的点位 [{x,y,r}]
+seatInfo(state, i)      // 座位条补充信息（如连五吃子的手数/盘面子数）
+moveAnim(state, {w,h})  // 走子动画（slide / drop，可选）
 ```
 
 ## 已知限制

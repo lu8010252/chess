@@ -178,7 +178,9 @@ function mount() {
   updater = initUpdater({
     showOverlay: (el, kind) => showOverlay(el, kind),
     closeOverlay: () => closeOverlay(),
-    toast: msg => toast(msg)
+    toast: msg => toast(msg),
+    // 只在首页、没有弹层时自动弹更新提示，避免对局中被「检查更新」打断
+    canPrompt: () => !overlay && !ui.home.hidden
   });
 
   renderHome();

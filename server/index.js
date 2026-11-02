@@ -52,7 +52,10 @@ let latestCache = { at: 0, data: null };
 
 async function latestRelease() {
   if (latestCache.data && Date.now() - latestCache.at < 10 * 60 * 1000) return latestCache.data;
-  const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: GH_HEADERS });
+  const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    headers: GH_HEADERS,
+    signal: AbortSignal.timeout(8000)
+  });
   if (!r.ok) throw new Error(`GitHub ${r.status}`);
   const j = await r.json();
   const asset = (j.assets || []).find(a => /\.apk$/i.test(a.name));
@@ -65,6 +68,10 @@ async function latestRelease() {
 }
 
 async function handleUpdate(req, res, pathname) {
+  if (req.method !== 'GET') {
+    res.writeHead(405, { allow: 'GET', 'content-type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+  }
   try {
     const rel = await latestRelease();
     if (pathname === '/api/update') {
@@ -72,7 +79,11 @@ async function handleUpdate(req, res, pathname) {
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-cache', 'access-control-allow-origin': '*' });
       return res.end(body);
     }
-    const up = await fetch(rel.url, { headers: { 'user-agent': 'qige-chess-update' }, redirect: 'follow' });
+    const up = await fetch(rel.url, {
+      headers: { 'user-agent': 'qige-chess-update' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15000)
+    });
     if (!up.ok || !up.body) throw new Error(`下载 ${up.status}`);
     const headers = {
       'content-type': 'application/vnd.android.package-archive',
