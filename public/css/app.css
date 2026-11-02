@@ -880,7 +880,7 @@ body.dpad .sheet .secondary:focus { box-shadow: 0 0 0 3px rgba(228, 185, 104, 0.
 /* 这些设备的 -webkit- 版本会把间距、字号、内边距整段丢弃，导致排版挤在一起 */
 @supports not (gap: 12px) {
   /* var(--safe-*) 在老内核里会让整条 padding 声明失效（归零），这里全部用固定值重写 */
-  .home { flex: 1; min-height: 0; padding: 24px 22px 28px; }
+  .home { flex: 1; min-height: 0; padding: 24px 22px 22px; }
   /* 首页本身是 flex 列容器：老内核会把头部/网格压缩，导致副标题被卡片盖住 */
   .home > * { flex: none; }
   .topbar { padding: 10px 16px; min-height: 56px; }
@@ -902,7 +902,7 @@ body.dpad .sheet .secondary:focus { box-shadow: 0 0 0 3px rgba(228, 185, 104, 0.
   .grid { grid-gap: 16px; }
   .game-card { display: block; padding: 14px; }
   .thumb {
-    height: 168px;
+    height: 158px;
     margin-bottom: 12px;
     padding: 6px;
   }
@@ -915,7 +915,7 @@ body.dpad .sheet .secondary:focus { box-shadow: 0 0 0 3px rgba(228, 185, 104, 0.
   }
   .card-name { font-size: 20px; }
   .card-tag { margin-left: 8px; font-size: 12px; }
-  .home-foot { margin-top: 28px; }
+  .home-foot { margin-top: 20px; }
 
   .topbar { min-height: 56px; }
   .icon-btn { margin-right: 12px; }
@@ -933,18 +933,21 @@ body.dpad .sheet .secondary:focus { box-shadow: 0 0 0 3px rgba(228, 185, 104, 0.
   .sheet {
     width: 560px;
     max-width: 100%;
-    padding: 26px;
-    max-height: 92%;
+    padding: 18px 20px;
+    max-height: 94%;
+    overflow-y: auto;
   }
-  .sheet-head { margin-bottom: 18px; }
+  .sheet-head { margin-bottom: 10px; }
   .sheet-head .mini {
-    width: 64px;
-    height: 64px;
-    margin-right: 14px;
+    width: 52px;
+    height: 52px;
+    margin-right: 12px;
   }
-  .sheet-head h2 { font-size: 24px; }
-  .field { margin-bottom: 16px; }
-  .seg button { margin: 4px; min-height: 50px; }
+  .sheet-head h2 { font-size: 20px; }
+  .sheet-head p { font-size: 12px; line-height: 1.4; margin-top: 4px; }
+  .field { margin-bottom: 10px; }
+  .field > label { margin-bottom: 4px; }
+  .seg button { margin: 4px; min-height: 42px; }
   .rule-item .no { margin-right: 12px; }
   .result-card { width: 440px; max-width: 92%; }
   .floating-exit { top: 12px; right: 12px; }
