@@ -875,3 +875,78 @@ body.dpad .sheet .secondary:focus { box-shadow: 0 0 0 3px rgba(228, 185, 104, 0.
   font-size: 12px;
   color: var(--dim);
 }
+
+/* ============ 老内核兜底：Chrome < 84 不支持 flex gap、< 79 不支持 clamp ============ */
+/* 这些设备的 -webkit- 版本会把间距、字号、内边距整段丢弃，导致排版挤在一起 */
+@supports not (gap: 12px) {
+  /* var(--safe-*) 在老内核里会让整条 padding 声明失效（归零），这里全部用固定值重写 */
+  .home { flex: 1; min-height: 0; padding: 24px 22px 28px; }
+  /* 首页本身是 flex 列容器：老内核会把头部/网格压缩，导致副标题被卡片盖住 */
+  .home > * { flex: none; }
+  .topbar { padding: 10px 16px; min-height: 56px; }
+  .bottombar { padding: 10px 18px 12px; min-height: 62px; }
+  .overlay { padding: 16px; }
+  .home-head { margin-bottom: 24px; }
+  .brand-mark {
+    width: 58px;
+    height: 58px;
+    margin-right: 16px;
+    font-size: 30px;
+    border-radius: 16px;
+  }
+  .brand h1 { font-size: 30px; }
+  .brand p { font-size: 14px; }
+  .home-actions .btn { margin-left: 10px; }
+  .home-actions .btn:first-child { margin-left: 0; }
+
+  .grid { grid-gap: 16px; }
+  .game-card { display: block; padding: 14px; }
+  .thumb {
+    height: 168px;
+    margin-bottom: 12px;
+    padding: 6px;
+  }
+  .thumb canvas {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: calc(100% - 12px);
+    height: calc(100% - 12px);
+  }
+  .card-name { font-size: 20px; }
+  .card-tag { margin-left: 8px; font-size: 12px; }
+  .home-foot { margin-top: 28px; }
+
+  .topbar { min-height: 56px; }
+  .icon-btn { margin-right: 12px; }
+  .title-box strong { font-size: 19px; }
+  .tools .btn { margin-left: 8px; }
+  .tools .btn:first-child { margin-left: 0; }
+  .stage { padding: 6px 10px; }
+
+  .bottombar { min-height: 62px; }
+  .seats .seat { margin-right: 8px; }
+  .game-actions .btn { margin-left: 8px; }
+  .game-actions .btn:first-child { margin-left: 0; }
+  .note { font-size: 13px; }
+
+  .sheet {
+    width: 560px;
+    max-width: 100%;
+    padding: 26px;
+    max-height: 92%;
+  }
+  .sheet-head { margin-bottom: 18px; }
+  .sheet-head .mini {
+    width: 64px;
+    height: 64px;
+    margin-right: 14px;
+  }
+  .sheet-head h2 { font-size: 24px; }
+  .field { margin-bottom: 16px; }
+  .seg button { margin: 4px; min-height: 50px; }
+  .rule-item .no { margin-right: 12px; }
+  .result-card { width: 440px; max-width: 92%; }
+  .floating-exit { top: 12px; right: 12px; }
+  .toast { bottom: 24px; }
+}
