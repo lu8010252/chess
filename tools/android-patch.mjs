@@ -343,7 +343,7 @@ import android.app.ActivityManager;
 import android.app.Application;
 import android.content.Context;
 import android.os.Debug;
-import android.webkit.WebView;
+import android.webkit.WebSettings;
 
 public class QigeApp extends Application {
     @Override
@@ -366,7 +366,7 @@ public class QigeApp extends Application {
 
         new Thread(() -> {
             try {
-                BootLog.write("ua=" + WebView.getDefaultUserAgent(QigeApp.this));
+                BootLog.write("ua=" + WebSettings.getDefaultUserAgent(QigeApp.this));
             } catch (Throwable e) {
                 BootLog.write("getDefaultUserAgent failed: " + e);
             }
@@ -521,31 +521,31 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onStart() {
+    public void onStart() {
         BootLog.write("onStart");
         super.onStart();
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         BootLog.write("onResume");
         super.onResume();
     }
 
     @Override
-    protected void onPause() {
+    public void onPause() {
         BootLog.write("onPause");
         super.onPause();
     }
 
     @Override
-    protected void onStop() {
+    public void onStop() {
         BootLog.write("onStop");
         super.onStop();
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         BootLog.write("onDestroy");
         super.onDestroy();
     }
