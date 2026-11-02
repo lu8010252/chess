@@ -269,18 +269,82 @@ writeFileSync(join(pkgDir, 'ApkUpdaterPlugin.java'), plugin);
 
 const mainActivity = `package com.lu8010252.qige;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
+import android.util.TypedValue;
 import android.webkit.WebView;
+import android.widget.ScrollView;
+import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
 
 import com.getcapacitor.BridgeActivity;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+
 public class MainActivity extends BridgeActivity {
+    private static final String CRASH_FILE = "crash.txt";
+
+    private static String trace(Throwable e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private void showText(String title, String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        tv.setPadding(32, 16, 32, 16);
+        tv.setTextIsSelectable(true);
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this).setTitle(title).setView(sv).setPositiveButton("知道了", null).show();
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        registerPlugin(ApkUpdaterPlugin.class);
-        super.onCreate(savedInstanceState);
+        // 闪退诊断：把未捕获异常写到文件，下次打开时弹窗显示原因
+        final File crashFile = new File(getFilesDir(), CRASH_FILE);
+        final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            try (FileOutputStream fo = new FileOutputStream(crashFile)) {
+                fo.write(trace(e).getBytes(StandardCharsets.UTF_8));
+            } catch (Throwable ignored) {
+            }
+            if (prev != null) prev.uncaughtException(t, e);
+        });
+        String lastCrash = null;
+        try {
+            if (crashFile.exists()) {
+                lastCrash = new String(java.nio.file.Files.readAllBytes(crashFile.toPath()), StandardCharsets.UTF_8);
+                //noinspection ResultOfMethodCallIgnored
+                crashFile.delete();
+            }
+        } catch (Throwable ignored) {
+        }
+
+        try {
+            registerPlugin(ApkUpdaterPlugin.class);
+            super.onCreate(savedInstanceState);
+        } catch (Throwable e) {
+            // 启动阶段出错（例如系统 WebView 缺失/太旧）：不闪退，直接把原因显示在屏幕上
+            if (savedInstanceState == null) savedInstanceState = new Bundle();
+            TextView tv = new TextView(this);
+            tv.setText("棋阁启动失败，请把下面的内容发给开发者：\\n\\n" + trace(e));
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            tv.setPadding(32, 32, 32, 32);
+            ScrollView sv = new ScrollView(this);
+            sv.addView(tv);
+            setContentView(sv);
+            return;
+        }
+        if (lastCrash != null) showText("上次闪退原因", lastCrash);
+
         // 自己接管返回键（手机返回键/手势、遥控器返回键）：交给网页处理，网页说「已在首页」才退出
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override

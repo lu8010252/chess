@@ -46,6 +46,11 @@ jobs:
           " "${VERSION}"
           echo "版本：${VERSION}"
 
+      - name: 降级网页脚本语法（兼容老电视/投影的旧 WebView）
+        run: |
+          npm install --no-save esbuild
+          node tools/transpile-web.mjs
+
       - name: 安装 Capacitor 并生成 Android 工程
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/app
