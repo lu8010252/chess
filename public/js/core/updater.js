@@ -1,6 +1,7 @@
 // 在线更新（仅 APK 内可用）：检查新版本 → 应用内下载 → 唤起系统安装器
 // 更新源按顺序尝试：① 你自己的更新服务器（docker 部署的这个站点，国内访问稳）② GitHub Releases
 import { VERSION, UPDATE_SERVER, REPO } from './version.js';
+import { getPlugin } from './native.js';
 
 const SERVER_KEY = 'qige.updateServer';
 const SKIP_KEY = 'qige.skipVersion';
@@ -38,16 +39,33 @@ function isNewer(latest, current) {
   return false;
 }
 
-async function getJson(url) {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 9000);
-  try {
-    const res = await fetch(url, { signal: ctl.signal, headers: { Accept: 'application/json' } });
+// 不用 AbortController（安卓 8 投影的 Chrome 62 没有它），改用 Promise.race 做超时
+function getJson(url) {
+  const req = fetch(url, { headers: { Accept: 'application/json' } }).then(res => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } finally {
-    clearTimeout(timer);
-  }
+    return res.json();
+  });
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('超时')), 9000);
+  });
+  return Promise.race([req, timeout]).then(
+    v => { clearTimeout(timer); return v; },
+    e => { clearTimeout(timer); throw e; }
+  );
+}
+
+// GitHub 网页通道：只访问 github.com 本身，不依赖 api.github.com
+async function latestFromGithubWeb() {
+  const { tag } = await getPlugin('ApkUpdater').latest({ repo: REPO });
+  const v = String(tag).replace(/^v/, '');
+  return {
+    version: v,
+    notes: '',
+    apkUrl: `https://github.com/${REPO}/releases/download/v${v}/qige-chess-v${v}.apk`,
+    size: 0,
+    source: 'GitHub'
+  };
 }
 
 /** 取最新版信息：{ version, notes, apkUrl, size, source } */
@@ -67,26 +85,17 @@ async function fetchLatest() {
     }
   }
   try {
+    return await latestFromGithubWeb();
+  } catch (e) {
+    errors.push(`GitHub 网页不通（${e.message || e}）`);
+  }
+  try {
     const j = await getJson(`https://api.github.com/repos/${REPO}/releases/latest`);
     const asset = (j.assets || []).find(a => /\.apk$/i.test(a.name));
     if (!asset) throw new Error('发布里没有 APK');
     return { version: j.tag_name, notes: j.body || '', apkUrl: asset.browser_download_url, size: asset.size || 0, source: 'GitHub' };
   } catch (e) {
     errors.push(`GitHub 接口不通（${e.message || e}）`);
-  }
-  // 备用：只访问 github.com 网页本身（能打开 GitHub 就能用），不依赖 api.github.com
-  try {
-    const { tag } = await window.Capacitor.registerPlugin('ApkUpdater').latest({ repo: REPO });
-    const v = String(tag).replace(/^v/, '');
-    return {
-      version: v,
-      notes: '',
-      apkUrl: `https://github.com/${REPO}/releases/download/v${v}/qige-chess-v${v}.apk`,
-      size: 0,
-      source: 'GitHub'
-    };
-  } catch (e) {
-    errors.push(`GitHub 网页也不通（${e.message || e}）`);
   }
   throw new Error(errors.join('；'));
 }
@@ -112,7 +121,7 @@ function escAttr(s) {
 
 /** 下载并安装；onProgress(已下载字节, 总字节) */
 async function downloadAndInstall(info, onProgress) {
-  const plugin = window.Capacitor.registerPlugin('ApkUpdater');
+  const plugin = getPlugin('ApkUpdater');
   if (!info.downloaded) {
     const handle = await plugin.addListener('progress', e => onProgress(e.received, e.total));
     try {

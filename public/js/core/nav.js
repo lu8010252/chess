@@ -1,5 +1,6 @@
 // 遥控器 / 键盘导航：方向键移动焦点与棋盘光标，确定键点击/落子，返回键退一层
 // 触屏、鼠标操作不受影响：只有按过方向键/确定键后才进入「遥控模式」，再触摸/点击就退出。
+import { getPlugin } from './native.js';
 
 const DIRS = {
   ArrowUp: [0, -1],
@@ -13,14 +14,14 @@ const START_FRAC = { chess: 0.78, xiangqi: 0.78, junqi: 0.78, checkers: 0.82 };
 
 export function exitApp() {
   try {
-    const u = window.Capacitor && window.Capacitor.registerPlugin('ApkUpdater');
+    const u = getPlugin('ApkUpdater');
     if (u && u.exit) {
       u.exit();
       return;
     }
   } catch {}
   try {
-    window.Capacitor.registerPlugin('App').exitApp();
+    getPlugin('App').exitApp();
   } catch {}
 }
 
@@ -251,11 +252,10 @@ export function initNav(api) {
   }, true);
 
   // 安卓返回键（Capacitor）：接管后不会直接退出应用
-  if (window.Capacitor && window.Capacitor.registerPlugin) {
-    try {
-      window.Capacitor.registerPlugin('App').addListener('backButton', () => goBack(true));
-    } catch {}
-  }
+  try {
+    const appPlugin = getPlugin('App');
+    if (appPlugin && appPlugin.addListener) appPlugin.addListener('backButton', () => goBack(true));
+  } catch {}
 
   ui.canvas.setAttribute('tabindex', '0');
   ui.canvas.addEventListener('blur', () => cursorEl.classList.add('hidden'));
