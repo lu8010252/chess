@@ -53,14 +53,14 @@ function mount() {
           <div class="brand-mark">棋</div>
           <div>
             <h1>棋阁</h1>
-            <p>七种棋类 · 双人对弈 / 人机对战 · 平板大棋盘</p>
+            <p>棋类 + 益智 · 双人对弈 / 人机对战 · 平板大棋盘</p>
           </div>
         </div>
         <div class="home-actions" id="home-actions"></div>
       </header>
       <div class="grid" id="grid"></div>
       <footer class="home-foot">
-        五子棋 · 象棋 · 军棋 · 国际象棋 · 围棋 · 跳棋 · 飞行棋<br />
+        五子棋 · 象棋 · 军棋 · 国际象棋 · 围棋 · 跳棋 · 2048 · 华容道 · 数字华容道<br />
         支持离线使用，可安装到平板上运行<br />
         <span class="ver">版本 v${VERSION}</span>
       </footer>
@@ -116,18 +116,43 @@ function mount() {
   ui.actions = document.getElementById('actions');
   ui.exitFull = document.getElementById('btn-exit-full');
 
+  // 支持滑动的单人游戏（2048、华容道）：按下记起点，抬起时判断是滑动还是点按；其余棋类按下即落子
+  let press = null;
   ui.canvas.addEventListener('pointerdown', ev => {
     ev.preventDefault();
     const rect = ui.canvas.getBoundingClientRect();
-    const res = session.tap(ev.clientX - rect.left, ev.clientY - rect.top, rect.width, rect.height);
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    if (session.mod && typeof session.mod.swipe === 'function') {
+      press = { id: ev.pointerId, x, y, w: rect.width, h: rect.height };
+      try { ui.canvas.setPointerCapture(ev.pointerId); } catch {}
+      return;
+    }
+    const res = session.tap(x, y, rect.width, rect.height);
     if (res && res.ok === false && res.msg) toast(res.msg);
   });
+  const endPress = ev => {
+    if (!press || press.id !== ev.pointerId) return;
+    const p = press;
+    press = null;
+    const rect = ui.canvas.getBoundingClientRect();
+    const dx = ev.clientX - rect.left - p.x;
+    const dy = ev.clientY - rect.top - p.y;
+    const far = Math.max(Math.abs(dx), Math.abs(dy));
+    const res = far >= 22
+      ? session.swipe(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'),
+        { x: p.x, y: p.y, w: p.w, h: p.h, dx, dy })
+      : session.tap(p.x, p.y, p.w, p.h);
+    if (res && res.ok === false && res.msg) toast(res.msg);
+  };
+  ui.canvas.addEventListener('pointerup', endPress);
+  ui.canvas.addEventListener('pointercancel', () => { press = null; });
   ui.canvas.addEventListener('contextmenu', ev => ev.preventDefault());
 
   document.getElementById('btn-back').onclick = goHome;
   document.getElementById('btn-rules').onclick = () => openRules(session.mod);
   document.getElementById('btn-undo').onclick = () => {
-    if (session.undo()) toast('已悔棋');
+    if (session.undo()) toast(session.meta && session.meta.solo ? '已撤销' : '已悔棋');
   };
   document.getElementById('btn-restart').onclick = () => {
     closeOverlay();
@@ -294,7 +319,7 @@ function openSetup(gameId) {
         </div>
       </div>
       <div id="setup-fields"></div>
-      <button class="primary" data-start>开始对弈</button>
+      <button class="primary" data-start>${meta.solo ? '开始游戏' : '开始对弈'}</button>
       <button class="secondary" data-rules>先看玩法教学</button>
     </div>`;
   showOverlay(wrap, 'setup');
@@ -307,7 +332,7 @@ function openSetup(gameId) {
     fields.innerHTML = `
       ${meta.variants ? `
       <div class="field">
-        <label>玩法</label>
+        <label>${meta.solo ? '关卡 / 规格' : '玩法'}</label>
         <div class="seg">
           ${meta.variants.map(v => `
             <button data-variant="${v.id}" class="${opts.variant === v.id ? 'on' : ''}">
@@ -315,14 +340,14 @@ function openSetup(gameId) {
             </button>`).join('')}
         </div>
       </div>` : ''}
-      <div class="field">
+      ${meta.solo ? '' : `<div class="field">
         <label>对战模式</label>
         <div class="seg">
           <button data-mode="pvp" class="${opts.mode === 'pvp' ? 'on' : ''}">双人对弈<small>同一台设备轮流下</small></button>
           <button data-mode="pve" class="${opts.mode === 'pve' ? 'on' : ''}">人机对战<small>和电脑下棋</small></button>
         </div>
-      </div>
-      ${opts.mode === 'pve' ? `
+      </div>`}
+      ${!meta.solo && opts.mode === 'pve' ? `
       <div class="field">
         <label>电脑水平</label>
         <div class="seg">
@@ -460,7 +485,9 @@ function updateChrome() {
   ui.tName.textContent = meta.name;
   const variant = (meta.variants || []).find(v => v.id === st.variant);
   const variantTag = variant && variant.id !== meta.variants[0].id ? ` · ${variant.label}` : '';
-  ui.tSub.textContent = (st.mode === 'pve' ? `人机对战 · ${levelName}` : '双人对弈 · 同屏轮流') + variantTag;
+  ui.tSub.textContent = meta.solo
+    ? `单人挑战${variant ? ' · ' + variant.label : ''}`
+    : (st.mode === 'pve' ? `人机对战 · ${levelName}` : '双人对弈 · 同屏轮流') + variantTag;
 
   const turns = st.seats.map((seat, i) => {
     const color = (meta.seatColors && meta.seatColors[i]) || '#9aa4b2';
@@ -478,6 +505,7 @@ function updateChrome() {
 
   const undoBtn = document.getElementById('btn-undo');
   undoBtn.disabled = !(st.history && st.history.length) || session.busy;
+  undoBtn.textContent = meta.solo ? '撤销' : '悔棋';
 
   const actions = session.mod.actions ? session.mod.actions(st) : [];
   if (st.over) actions.push({ id: '__again', label: '再来一局', primary: true });
@@ -640,7 +668,7 @@ function showResult(st) {
   wrap.innerHTML = `
     <div class="result-card">
       <div class="big">${r.text}</div>
-      <div class="sub">${st.mode === 'pve' ? '人机对战' : '双人对弈'}${plies ? ` · 共 ${plies} 手` : ''}</div>
+      <div class="sub">${session.meta && session.meta.solo ? '单人挑战' : st.mode === 'pve' ? '人机对战' : '双人对弈'}${session.meta && session.meta.solo ? (r.reason ? ` · ${r.reason}` : '') : plies ? ` · 共 ${plies} 手` : ''}</div>
       <div class="row">
         <button class="btn gold" data-r="again">再来一局</button>
         <button class="btn" data-r="view">看看棋盘</button>

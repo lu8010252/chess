@@ -1,9 +1,9 @@
 {
   "name": "qige-chess",
-  "version": "1.1.8",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
-  "description": "棋阁 · 七种棋类（五子棋 / 象棋 / 军棋 / 国际象棋 / 围棋 / 跳棋 / 飞行棋），平板优先，双人与人机对战",
+  "description": "棋阁 · 六种棋类 + 三款益智游戏（五子棋 / 象棋 / 军棋 / 国际象棋 / 围棋 / 跳棋 / 2048 / 华容道 / 数字华容道），平板优先",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",

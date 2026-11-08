@@ -39,9 +39,76 @@ function playOne(mod, level, limit = 260) {
   return { state, steps, ms: Date.now() - t0, slowest };
 }
 
+/** 单人益智（2048 / 华容道 / 数字华容道）：没有电脑对手，测规则、悔棋和可解性 */
+function testSolo(mod) {
+  const { meta } = mod;
+  check(meta.seats === 1 && meta.solo === true, '单人游戏标记');
+  check(typeof mod.swipe === 'function' && typeof mod.tap === 'function', '支持点按与滑动');
+  for (const v of (meta.variants && meta.variants.length ? meta.variants : [{ id: '' }])) {
+    const tag = `${v.label || meta.name}`;
+    const state = mod.create({ variant: v.id });
+    check(state.seats.length === 1 && state.seats[0].ai === false, `${tag}：单座位且不是电脑`);
+
+    // 悔棋往返：走一步、撤销，棋盘类状态要完全一致
+    const keyOf = st => JSON.stringify({ b: st.board, t: st.tiles, p: st.pieces, s: st.score, m: st.moves });
+    const before = keyOf(state);
+    const mv = mod.aiMove(state);
+    if (mv) {
+      const ok = mod.applyMove(state, mv);
+      check(ok, `${tag}：能走出第一步`);
+      mod.undo(state);
+      check(keyOf(state) === before, `${tag}：撤销可完整回退`);
+    } else {
+      check(state.over, `${tag}：已在终局`);
+    }
+
+    // 自对弈
+    let steps = 0;
+    const limit = meta.id === 'klotski' ? 400 : meta.id === 'g2048' ? 6000 : 1500;
+    const t0 = Date.now();
+    if (meta.id === 'klotski') {
+      const path = mod.solve(state);
+      check(path !== null, `${tag}：有解`);
+      if (path) {
+        check(!v.steps || path.length === v.steps, `${tag}：最少 ${path.length} 步${v.steps ? `（标注 ${v.steps}）` : ''}`);
+        for (const m of path) {
+          const mm = mod.toMove(state, m);
+          if (!mm || !mod.applyMove(state, mm)) throw new Error(`${tag} 走法不合法`);
+          steps++;
+        }
+        check(state.over && state.result, `${tag}：按最优解走完后过关`);
+      }
+    } else {
+      while (!state.over && steps < limit) {
+        const m = mod.aiMove(state);
+        if (!m) break;
+        if (!mod.applyMove(state, m)) throw new Error(`${tag} 非法走法 ${JSON.stringify(m)}`);
+        steps++;
+        if (state.tiles) {
+          const sorted = state.tiles.slice().sort((a, b) => a - b);
+          if (sorted.some((x, i) => x !== i)) throw new Error(`${tag} 方块丢失`);
+        }
+      }
+      check(steps > 0, `${tag}：自动走了 ${steps} 步（${Date.now() - t0}ms）`);
+      if (meta.id === 'g2048') check(state.over, `${tag}：能走到无路可走`);
+    }
+  }
+}
+
 for (const mod of GAMES) {
   const { meta } = mod;
   console.log(`\n【${meta.name}】${meta.en}`);
+  if (meta.solo) {
+    check(Array.isArray(meta.rules) && meta.rules.length >= 3, `规则教学条目 ≥ 3 (${meta.rules.length})`);
+    check(Array.isArray(meta.tips) && meta.tips.length >= 1, `技巧条目 ≥ 1 (${meta.tips.length})`);
+    check(typeof meta.aspect === 'number' && meta.aspect > 0.2 && meta.aspect < 3, `棋盘比例 ${meta.aspect}`);
+    try {
+      testSolo(mod);
+    } catch (err) {
+      check(false, `测试异常：${err.message}`);
+    }
+    continue;
+  }
   check(typeof meta.id === 'string' && meta.id === meta.id.toLowerCase(), `meta.id 合法 (${meta.id})`);
   check(Array.isArray(meta.rules) && meta.rules.length >= 3, `规则教学条目 ≥ 3 (${meta.rules.length})`);
   check(Array.isArray(meta.tips) && meta.tips.length >= 1, `技巧条目 ≥ 1 (${meta.tips.length})`);

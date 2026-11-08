@@ -2,6 +2,8 @@
 // 触屏、鼠标操作不受影响：只有按过方向键/确定键后才进入「遥控模式」，再触摸/点击就退出。
 import { getPlugin } from './native.js';
 
+const KEY_DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+
 const DIRS = {
   ArrowUp: [0, -1],
   ArrowDown: [0, 1],
@@ -224,6 +226,23 @@ export function initNav(api) {
       return;
     }
     if (typing) return;
+
+    // 2048 这类用方向键滑动的游戏：方向键直接滑棋盘；按确定键才进入「选按钮」模式，方向键回到棋盘后又是滑动
+    const keySwipe = api.isTable() && !api.isOverlayOpen() && session.mod && session.mod.meta.swipeKeys && session.state;
+    if (keySwipe && KEY_DIR[k] && (!dpadOn() || document.activeElement === ui.canvas)) {
+      ev.preventDefault();
+      if (document.activeElement !== ui.canvas) ui.canvas.focus({ preventScroll: true });
+      session.swipe(KEY_DIR[k], {});
+      return;
+    }
+    if (keySwipe && (k === 'Enter' || k === ' ') && document.activeElement === ui.canvas) {
+      ev.preventDefault();
+      enableDpad();
+      const undo = document.getElementById('btn-undo');
+      const btn = undo && !undo.disabled ? undo : document.getElementById('btn-back');
+      if (btn) btn.focus({ preventScroll: true });
+      return;
+    }
 
     if (DIRS[k]) {
       ev.preventDefault();

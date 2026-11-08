@@ -58,7 +58,7 @@ export class Session {
     this.gameId = gameId;
     this.mod = mod;
     this.opts = {
-      mode: opts.mode === 'pve' ? 'pve' : 'pvp',
+      mode: !mod.meta.solo && opts.mode === 'pve' ? 'pve' : 'pvp',
       level: Number(opts.level) || 2,
       humanSeat: Number(opts.humanSeat) === 1 ? 1 : 0,
       variant: typeof opts.variant === 'string' ? opts.variant : ''
@@ -109,6 +109,16 @@ export class Session {
       this.save();
       this.maybeAI();
     }
+    return res;
+  }
+
+  /** 滑动操作（2048、华容道、数字华容道）：pt 带起点 x、y、棋盘宽高 w、h 和位移 dx、dy */
+  swipe(dir, pt = {}) {
+    if (!this.state || this.busy || this.state.over || !this.mod.swipe) return null;
+    const res = this.mod.swipe(this.state, dir, pt) || { ok: true, moved: false };
+    this.lastBy = 'human';
+    this.emit();
+    if (res.moved) this.save();
     return res;
   }
 
@@ -181,11 +191,10 @@ export class Session {
     if (this.isAITurn()) this.maybeAI();
   }
 
-  /** 电脑每一步的最短思考时间（毫秒）：水平越高停得越久；飞行棋的掷骰/走子各算一步，停得短些 */
+  /** 电脑每一步的最短思考时间（毫秒）：水平越高停得越久 */
   aiDelay() {
     const level = (this.state && this.state.level) || 2;
-    let [lo, hi] = { 1: [600, 1000], 2: [800, 1400], 3: [1000, 1700] }[level] || [800, 1400];
-    if (this.gameId === 'aeroplane') [lo, hi] = [500, 850];
+    const [lo, hi] = { 1: [600, 1000], 2: [800, 1400], 3: [1000, 1700] }[level] || [800, 1400];
     return lo + Math.random() * (hi - lo);
   }
 
